@@ -21,22 +21,17 @@ npm start
 
 โหมดคนละเครื่องต้องมีเซิร์ฟเวอร์ Node ค้างไว้ — **ฝากไฟล์อย่าง GitHub Pages / Netlify แบบสถิตใช้ไม่ได้**
 
-แนะนำ [Render](https://render.com) แผน Free:
+โค้ดอยู่ที่: https://github.com/studio22mailme/number-guess-game
 
-1. สร้างบัญชีที่ [render.com](https://render.com) (ล็อกอินด้วย GitHub ได้)
-2. อัปโค้ดโปรเจกต์นี้ขึ้น GitHub (สร้าง repo ใหม่ แล้ว push ไฟล์ทั้งหมด)
-3. ใน Render กด **New → Blueprint** หรือ **New → Web Service**
-4. เลือก repo ของเกมนี้
-5. ตั้งค่า roughly ดังนี้ (ถ้าใช้ไฟล์ `render.yaml` จะถูกอ่านให้อัตโนมัติ):
-   - **Runtime:** Node
-   - **Build Command:** `npm install`
-   - **Start Command:** `npm start`
-   - **Plan:** Free
-   - **Health Check Path:** `/health`
-6. กด Deploy รอจนสถานะเป็น Live
-7. ได้ลิงก์ประมาณ `https://ชื่อบริการ.onrender.com` — ส่งลิงก์นี้ให้เพื่อนเปิดได้เลย
+### Deploy ครั้งเดียวบน Render
 
-จากนั้นใช้โหมด **คนละเครื่อง** ตามปกติ: คนหนึ่งสร้างห้อง อีกคนเข้าร่วมด้วยรหัส
+1. เปิดลิงก์นี้: [Deploy to Render](https://render.com/deploy?repo=https://github.com/studio22mailme/number-guess-game)
+2. ล็อกอิน Render ด้วย GitHub (บัญชีเดียวกับที่ push โค้ดได้)
+3. กด **Apply** / **Create** แผน **Free**
+4. รอ Deploy จนสถานะเป็น **Live**
+5. ได้ลิงก์ประมาณ `https://number-guess-game-xxxx.onrender.com` — ส่งให้เพื่อนเปิดได้เลย
+
+จากนั้นใช้โหมด **คนละเครื่อง**: คนหนึ่งสร้างห้อง อีกคนเข้าร่วมด้วยรหัส
 
 ### ข้อจำกัดแผนฟรีของ Render
 
