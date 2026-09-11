@@ -1,0 +1,1101 @@
+(() => {
+  const DIGIT_COUNT = 4;
+  const MAX_PLAYERS = 8;
+  const MAX_ROUNDS = 30;
+  const SECONDS_PER_LINE = 120;
+
+  const screens = {
+    setup: document.getElementById("screen-setup"),
+    lobby: document.getElementById("screen-lobby"),
+    gate: document.getElementById("screen-gate"),
+    play: document.getElementById("screen-play"),
+    result: document.getElementById("screen-result"),
+  };
+
+  const els = {
+    playerList: document.getElementById("player-list"),
+    playersField: document.getElementById("players-field"),
+    onlineField: document.getElementById("online-field"),
+    playerNameInput: document.getElementById("player-name-input"),
+    onlineNameInput: document.getElementById("online-name-input"),
+    roomCodeInput: document.getElementById("room-code-input"),
+    joinCodeRow: document.getElementById("join-code-row"),
+    addPlayerBtn: document.getElementById("add-player-btn"),
+    roundsField: document.getElementById("rounds-field"),
+    roundsLabel: document.getElementById("rounds-label"),
+    limitChoices: document.getElementById("limit-choices"),
+    roundsRow: document.getElementById("rounds-row"),
+    roundsInput: document.getElementById("rounds-input"),
+    roundsInputLabel: document.getElementById("rounds-input-label"),
+    roundsSuffix: document.getElementById("rounds-suffix"),
+    timePreview: document.getElementById("time-preview"),
+    repeatField: document.getElementById("repeat-field"),
+    setupError: document.getElementById("setup-error"),
+    startBtn: document.getElementById("start-btn"),
+    lobbyCode: document.getElementById("lobby-code"),
+    lobbySettings: document.getElementById("lobby-settings"),
+    lobbyLink: document.getElementById("lobby-link"),
+    lobbyPlayers: document.getElementById("lobby-players"),
+    lobbyError: document.getElementById("lobby-error"),
+    lobbyStartBtn: document.getElementById("lobby-start-btn"),
+    lobbyLeaveBtn: document.getElementById("lobby-leave-btn"),
+    gateKicker: document.getElementById("gate-kicker"),
+    gateName: document.getElementById("gate-name"),
+    gateNote: document.getElementById("gate-note"),
+    readyBtn: document.getElementById("ready-btn"),
+    paperBody: document.getElementById("paper-body"),
+    paperOwner: document.getElementById("paper-owner"),
+    playStatus: document.getElementById("play-status"),
+    waitFriends: document.getElementById("wait-friends"),
+    playError: document.getElementById("play-error"),
+    gameTimer: document.getElementById("game-timer"),
+    keypad: document.getElementById("keypad"),
+    afterTurn: document.getElementById("after-turn"),
+    nextBtn: document.getElementById("next-btn"),
+    reviewBar: document.getElementById("review-bar"),
+    reviewPlayers: document.getElementById("review-players"),
+    resultKicker: document.getElementById("result-kicker"),
+    resultTitle: document.getElementById("result-title"),
+    resultSecret: document.getElementById("result-secret"),
+    resultDetail: document.getElementById("result-detail"),
+  };
+
+  const setup = {
+    mode: "solo",
+    allowRepeat: false,
+    limitRounds: false,
+    onlineAction: "create",
+    names: [],
+  };
+
+  let game = null;
+  let shuffleTimer = null;
+  let gameToken = 0;
+  let timerTick = null;
+
+  let socket = null;
+  let online = {
+    you: null,
+    code: null,
+    players: [],
+    endsAt: null,
+    round: 1,
+    waiting: false,
+    papers: null,
+    secondsPerLine: SECONDS_PER_LINE,
+    lanAddresses: [],
+    port: null,
+  };
+
+  function showScreen(name) {
+    Object.entries(screens).forEach(([key, node]) => {
+      node.hidden = key !== name;
+    });
+  }
+
+  function showSetupError(message) {
+    els.setupError.hidden = !message;
+    els.setupError.textContent = message || "";
+  }
+
+  function showLobbyError(message) {
+    els.lobbyError.hidden = !message;
+    els.lobbyError.textContent = message || "";
+  }
+
+  function showPlayError(message) {
+    els.playError.hidden = !message;
+    els.playError.textContent = message || "";
+  }
+
+  function escapeHtml(text) {
+    return String(text)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;");
+  }
+
+  function generateSecret(allowRepeat) {
+    if (allowRepeat) {
+      return Array.from({ length: DIGIT_COUNT }, () => Math.floor(Math.random() * 10));
+    }
+    const pool = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    for (let i = pool.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    return pool.slice(0, DIGIT_COUNT);
+  }
+
+  function evaluateGuess(guess, secret) {
+    const exact = Array(DIGIT_COUNT).fill(false);
+    const secretUsed = Array(DIGIT_COUNT).fill(false);
+    let blacks = 0;
+    let whites = 0;
+
+    for (let i = 0; i < DIGIT_COUNT; i += 1) {
+      if (guess[i] === secret[i]) {
+        exact[i] = true;
+        secretUsed[i] = true;
+        blacks += 1;
+      }
+    }
+
+    for (let i = 0; i < DIGIT_COUNT; i += 1) {
+      if (exact[i]) continue;
+      for (let j = 0; j < DIGIT_COUNT; j += 1) {
+        if (!secretUsed[j] && guess[i] === secret[j]) {
+          secretUsed[j] = true;
+          whites += 1;
+          break;
+        }
+      }
+    }
+
+    return {
+      blacks,
+      whites,
+      win: blacks === DIGIT_COUNT,
+      none: blacks === 0 && whites === 0,
+    };
+  }
+
+  function feedbackMarkup(row) {
+    if (row.win) return `<span class="mark-win">★ ถูกต้องแล้ว</span>`;
+    if (row.none) return `<span class="peg none"></span>`;
+    return `${'<span class="peg black"></span>'.repeat(row.blacks)}${'<span class="peg white"></span>'.repeat(row.whites)}`;
+  }
+
+  function currentPlayer() {
+    return game.players[game.currentIndex];
+  }
+
+  function remainingRounds(player) {
+    if (!game.roundLimit) return null;
+    return game.roundLimit - player.rows.length;
+  }
+
+  function playerHasRounds(player) {
+    return !game.roundLimit || player.rows.length < game.roundLimit;
+  }
+
+  function nextPlayerIndex(fromIndex) {
+    const total = game.players.length;
+    for (let step = 1; step <= total; step += 1) {
+      const idx = (fromIndex + step) % total;
+      if (playerHasRounds(game.players[idx])) return idx;
+    }
+    return null;
+  }
+
+  function emptyDraft() {
+    return Array(DIGIT_COUNT).fill(null);
+  }
+
+  function formatDuration(totalSeconds) {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins}:${String(secs).padStart(2, "0")}`;
+  }
+
+  function updateTimePreview() {
+    if (setup.mode !== "online") {
+      els.timePreview.hidden = true;
+      return;
+    }
+    const rounds = Number(els.roundsInput.value) || 0;
+    const seconds = rounds * SECONDS_PER_LINE;
+    const mins = Math.floor(seconds / 60);
+    els.timePreview.hidden = false;
+    els.timePreview.textContent = `เวลารวมทั้งเกม ${mins} นาที (${rounds} บรรทัด × 2 นาที) · ทุกคนทายพร้อมกัน รอส่งครบทุกคนค่อยขึ้นบรรทัดถัดไป`;
+  }
+
+  function updateSetupVisibility() {
+    const isMulti = setup.mode === "multi";
+    const isOnline = setup.mode === "online";
+
+    els.playersField.hidden = !isMulti;
+    els.onlineField.hidden = !isOnline;
+    els.joinCodeRow.hidden = !(isOnline && setup.onlineAction === "join");
+    els.repeatField.hidden = isOnline && setup.onlineAction === "join";
+
+    if (isOnline) {
+      els.limitChoices.hidden = true;
+      els.roundsRow.hidden = setup.onlineAction === "join";
+      els.roundsLabel.textContent = "จำนวนบรรทัด (บังคับ)";
+      els.roundsInputLabel.textContent = "กี่บรรทัด";
+      els.roundsSuffix.textContent = "บรรทัด";
+      els.startBtn.textContent = setup.onlineAction === "create" ? "สร้างห้อง" : "เข้าร่วมห้อง";
+      updateTimePreview();
+    } else {
+      els.limitChoices.hidden = false;
+      els.roundsRow.hidden = !setup.limitRounds;
+      els.roundsLabel.textContent = "จำกัดจำนวนรอบไหม";
+      els.roundsInputLabel.textContent = "กี่รอบ";
+      els.roundsSuffix.textContent = "รอบต่อคน";
+      els.timePreview.hidden = true;
+      els.startBtn.textContent = "เริ่มเกม";
+    }
+  }
+
+  function renderPlayerList() {
+    if (!setup.names.length) {
+      els.playerList.innerHTML = `<li class="empty-players">ยังไม่มีชื่อ · เพิ่มอย่างน้อย 2 คน</li>`;
+      return;
+    }
+    els.playerList.innerHTML = setup.names
+      .map(
+        (name, index) => `
+        <li class="player-item">
+          <span>${escapeHtml(name)}</span>
+          <button type="button" class="remove-player" data-remove="${index}">ลบ</button>
+        </li>`
+      )
+      .join("");
+  }
+
+  function setChoiceGroup(selector, key, value) {
+    document.querySelectorAll(selector).forEach((btn) => {
+      btn.setAttribute("aria-pressed", String(btn.dataset[key] === value));
+    });
+  }
+
+  function addPlayerName() {
+    const name = els.playerNameInput.value.trim();
+    showSetupError("");
+    if (!name) {
+      showSetupError("พิมพ์ชื่อก่อนแล้วค่อยเพิ่ม");
+      return;
+    }
+    if (setup.names.length >= MAX_PLAYERS) {
+      showSetupError(`เพิ่มได้สูงสุด ${MAX_PLAYERS} คน`);
+      return;
+    }
+    if (setup.names.some((item) => item === name)) {
+      showSetupError("ชื่อนี้มีแล้ว");
+      return;
+    }
+    setup.names.push(name);
+    els.playerNameInput.value = "";
+    renderPlayerList();
+    els.playerNameInput.focus();
+  }
+
+  function collectSettings() {
+    if (setup.mode === "online") {
+      const name = els.onlineNameInput.value.trim();
+      if (!name) return { error: "กรุณาใส่ชื่อของคุณ" };
+
+      if (setup.onlineAction === "join") {
+        const code = els.roomCodeInput.value.trim().toUpperCase();
+        if (!code || code.length < 4) return { error: "ใส่รหัสห้อง 4 ตัว" };
+        return { mode: "online", action: "join", name, code };
+      }
+
+      const rounds = Number(els.roundsInput.value);
+      if (!Number.isInteger(rounds) || rounds < 1 || rounds > MAX_ROUNDS) {
+        return { error: `จำนวนบรรทัดต้องเป็นเลข 1–${MAX_ROUNDS}` };
+      }
+      return {
+        mode: "online",
+        action: "create",
+        name,
+        allowRepeat: setup.allowRepeat,
+        roundLimit: rounds,
+      };
+    }
+
+    const names =
+      setup.mode === "solo"
+        ? ["ผู้เล่น"]
+        : setup.names.map((name) => name.trim()).filter(Boolean);
+
+    if (setup.mode === "multi" && names.length < 2) {
+      return { error: "แข่งกับเพื่อนต้องมีอย่างน้อย 2 คน" };
+    }
+
+    let roundLimit = null;
+    if (setup.limitRounds) {
+      const rounds = Number(els.roundsInput.value);
+      if (!Number.isInteger(rounds) || rounds < 1 || rounds > MAX_ROUNDS) {
+        return { error: `จำนวนรอบต้องเป็นเลข 1–${MAX_ROUNDS}` };
+      }
+      roundLimit = rounds;
+    }
+
+    return {
+      mode: setup.mode,
+      allowRepeat: setup.allowRepeat,
+      roundLimit,
+      names,
+    };
+  }
+
+  function createGame(settings, secret) {
+    return {
+      mode: settings.mode,
+      allowRepeat: settings.allowRepeat,
+      roundLimit: settings.roundLimit,
+      secret: secret || generateSecret(settings.allowRepeat),
+      players: settings.names.map((name) => ({ name, rows: [] })),
+      currentIndex: 0,
+      draft: emptyDraft(),
+      caret: 0,
+      phase: "playing",
+      winnerIndex: null,
+      winnerIds: [],
+      reviewing: false,
+      reviewIndex: 0,
+    };
+  }
+
+  function paperRowCount(player) {
+    if (game.roundLimit) return game.roundLimit;
+    return Math.max(player.rows.length + 1, 8);
+  }
+
+  function renderPaper(player, interactive) {
+    const rowCount = paperRowCount(player);
+    const rows = [];
+
+    for (let i = 0; i < rowCount; i += 1) {
+      const filled = player.rows[i];
+      const isDraftRow = interactive && i === player.rows.length && game.phase === "playing";
+      const isPendingRow =
+        game.mode === "online" && online.waiting && i === player.rows.length && !filled;
+      const digits = filled
+        ? filled.guess
+        : isDraftRow || isPendingRow
+          ? game.draft
+          : [null, null, null, null];
+      const feedback = filled ? feedbackMarkup(filled) : isPendingRow ? "รอ…" : "";
+      const feedbackClass = filled?.win ? "feedback win" : "feedback";
+
+      const digitCells = digits
+        .map((digit, digitIndex) => {
+          const active = isDraftRow && game.caret === digitIndex ? " cell-active" : "";
+          const value = digit === null ? "" : String(digit);
+          return `<td class="digit${active}"${isDraftRow ? ` data-draft-cell="${digitIndex}"` : ""}>${value}</td>`;
+        })
+        .join("");
+
+      rows.push(`
+        <tr>
+          <td class="idx">${i + 1}</td>
+          ${digitCells}
+          <td class="${feedbackClass}">${feedback}</td>
+        </tr>`);
+    }
+
+    els.paperBody.innerHTML = rows.join("");
+    if (game.mode === "multi" || game.mode === "online") {
+      els.paperOwner.textContent = `กระดาษของ ${player.name}`;
+    } else {
+      els.paperOwner.textContent = "";
+    }
+  }
+
+  function updateKeypadState() {
+    document.querySelectorAll(".key[data-digit]").forEach((btn) => {
+      const digit = Number(btn.dataset.digit);
+      const alreadyUsed = game.draft.some((value, index) => value === digit && index !== game.caret);
+      btn.disabled = !game.allowRepeat && alreadyUsed;
+    });
+  }
+
+  function stopGameTimer() {
+    if (timerTick) {
+      clearInterval(timerTick);
+      timerTick = null;
+    }
+    els.gameTimer.hidden = true;
+  }
+
+  function startGameTimer(endsAt) {
+    stopGameTimer();
+    online.endsAt = endsAt;
+    els.gameTimer.hidden = false;
+
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+      els.gameTimer.textContent = `เหลือเวลา ${formatDuration(left)}`;
+      if (left <= 60) els.gameTimer.classList.add("urgent");
+      else els.gameTimer.classList.remove("urgent");
+    };
+    tick();
+    timerTick = setInterval(tick, 250);
+  }
+
+  function renderWaitFriends(players) {
+    if (!players || !online.waiting) {
+      els.waitFriends.hidden = true;
+      return;
+    }
+    const waitingNames = players.filter((p) => !p.submitted).map((p) => p.name);
+    const done = players.filter((p) => p.submitted).length;
+    els.waitFriends.hidden = false;
+    els.waitFriends.textContent = waitingNames.length
+      ? `ส่งแล้ว · รอเพื่อน (${done}/${players.length}) — ${waitingNames.join(", ")}`
+      : `ส่งแล้ว · รอเพื่อน (${done}/${players.length})`;
+  }
+
+  function renderPlay() {
+    const player = game.reviewing ? game.players[game.reviewIndex] : currentPlayer();
+    const interactive = !game.reviewing && game.phase === "playing" && !online.waiting;
+    renderPaper(player, interactive);
+
+    if (game.reviewing) {
+      els.keypad.hidden = true;
+      els.afterTurn.hidden = true;
+      els.reviewBar.hidden = false;
+      els.waitFriends.hidden = true;
+      document.getElementById("quit-btn").hidden = true;
+      els.playStatus.textContent = "จบเกมแล้ว · เปิดดูกระดาษได้";
+      showPlayError("");
+      return;
+    }
+
+    document.getElementById("quit-btn").hidden = false;
+    els.reviewBar.hidden = true;
+    els.keypad.hidden = game.phase !== "playing";
+    els.afterTurn.hidden = game.phase !== "waiting-next";
+
+    if (game.phase === "playing") {
+      const left = remainingRounds(player);
+      const repeatText = game.allowRepeat ? "ซ้ำได้" : "ไม่ซ้ำ";
+      const roundText = game.roundLimit ? `${game.roundLimit} บรรทัด` : "ไม่จำกัดรอบ";
+      const leftText = left === null ? "" : ` · เหลือ ${left} บรรทัด`;
+      if (game.mode === "online") {
+        els.playStatus.textContent = `${repeatText} · บรรทัดที่ ${online.round}/${game.roundLimit}${leftText}`;
+      } else {
+        const soloRound = game.roundLimit ? `จำกัด ${game.roundLimit} รอบ` : "ไม่จำกัดรอบ";
+        const soloLeft = left === null ? "" : ` · เหลือ ${left} รอบ`;
+        els.playStatus.textContent = `${repeatText} · ${soloRound}${soloLeft}`;
+      }
+      updateKeypadState();
+    }
+
+    if (game.mode === "online" && online.waiting) {
+      els.keypad.hidden = true;
+      renderWaitFriends(online.players);
+    } else {
+      els.waitFriends.hidden = true;
+    }
+  }
+
+  function placeDigit(digit) {
+    if (!game || game.phase !== "playing" || game.reviewing || online.waiting) return;
+    showPlayError("");
+
+    if (!game.allowRepeat) {
+      const duplicate = game.draft.some((value, index) => value === digit && index !== game.caret);
+      if (duplicate) {
+        showPlayError("โหมดนี้ห้ามใช้เลขซ้ำ");
+        return;
+      }
+    }
+
+    game.draft[game.caret] = digit;
+    const nextEmpty = game.draft.findIndex((value, index) => index > game.caret && value === null);
+    if (nextEmpty !== -1) game.caret = nextEmpty;
+    else if (game.caret < DIGIT_COUNT - 1) game.caret += 1;
+    renderPlay();
+  }
+
+  function backspace() {
+    if (!game || game.phase !== "playing" || game.reviewing || online.waiting) return;
+    showPlayError("");
+    if (game.draft[game.caret] !== null) {
+      game.draft[game.caret] = null;
+    } else if (game.caret > 0) {
+      game.caret -= 1;
+      game.draft[game.caret] = null;
+    }
+    renderPlay();
+  }
+
+  function submitGuess() {
+    if (!game || game.phase !== "playing" || game.reviewing || online.waiting) return;
+    showPlayError("");
+
+    if (game.draft.some((digit) => digit === null)) {
+      showPlayError("ต้องกรอกตัวเลข 4 หลักทุกครั้ง");
+      return;
+    }
+
+    if (!game.allowRepeat) {
+      const unique = new Set(game.draft);
+      if (unique.size !== DIGIT_COUNT) {
+        showPlayError("โหมดนี้ห้ามใช้เลขซ้ำ");
+        return;
+      }
+    }
+
+    if (game.mode === "online") {
+      online.waiting = true;
+      renderPlay();
+      sendSocket({
+        type: "submit",
+        round: online.round,
+        digits: [...game.draft],
+      });
+      return;
+    }
+
+    const player = currentPlayer();
+    const result = evaluateGuess(game.draft, game.secret);
+    player.rows.push({
+      guess: [...game.draft],
+      ...result,
+    });
+    game.draft = emptyDraft();
+    game.caret = 0;
+
+    if (result.win) {
+      game.winnerIndex = game.currentIndex;
+      game.phase = "over";
+      renderPlay();
+      window.setTimeout(() => showResult(), 450);
+      return;
+    }
+
+    if (game.mode === "solo") {
+      if (!playerHasRounds(player)) {
+        game.phase = "over";
+        renderPlay();
+        window.setTimeout(() => showResult(), 450);
+        return;
+      }
+      renderPlay();
+      return;
+    }
+
+    game.phase = "waiting-next";
+    renderPlay();
+    const nxt = nextPlayerIndex(game.currentIndex);
+    if (nxt === null) {
+      game.phase = "over";
+      els.afterTurn.hidden = true;
+      window.setTimeout(() => showResult(), 450);
+      return;
+    }
+    els.afterTurn.hidden = false;
+    els.playStatus.textContent = "ตรวจแล้ว · ส่งเครื่องให้คนถัดไปได้";
+  }
+
+  function secretText(secret) {
+    return (secret || game.secret).join("  ");
+  }
+
+  function showResult(extra = null) {
+    stopGameTimer();
+    const onlineEnded = game.mode === "online" && extra;
+    const winners = onlineEnded ? extra.winners || [] : [];
+    const won = onlineEnded
+      ? winners.length > 0
+      : game.winnerIndex !== null;
+    const winner = !onlineEnded && won ? game.players[game.winnerIndex] : null;
+
+    if (onlineEnded) {
+      if (extra.reason === "timeout") els.resultKicker.textContent = "หมดเวลาแล้ว";
+      else if (extra.reason === "rounds") els.resultKicker.textContent = "ครบทุกบรรทัดแล้ว";
+      else if (extra.reason === "abandoned") els.resultKicker.textContent = "เพื่อนออกจากห้อง";
+      else els.resultKicker.textContent = won ? "มีคนทายถูกแล้ว" : "จบเกม";
+
+      if (winners.length === 1) els.resultTitle.textContent = `${winners[0].name} ชนะ`;
+      else if (winners.length > 1) els.resultTitle.textContent = `เสมอ · ${winners.map((w) => w.name).join(", ")}`;
+      else els.resultTitle.textContent = "ยังไม่มีใครทายถูก";
+
+      els.resultSecret.textContent = secretText(extra.secret);
+      els.resultDetail.textContent = won
+        ? `ทายถูก · รหัสคือตัวเลขด้านบน`
+        : `รหัสคือตัวเลขด้านบน · ${game.allowRepeat ? "โหมดซ้ำได้" : "โหมดไม่ซ้ำ"}`;
+    } else {
+      els.resultKicker.textContent = won ? "มีคนทายถูกแล้ว" : "หมดรอบแล้ว";
+      els.resultTitle.textContent = won
+        ? game.mode === "solo"
+          ? "ถูกต้องแล้ว"
+          : `${winner.name} ชนะ`
+        : "ยังไม่มีใครทายถูก";
+      els.resultSecret.textContent = secretText();
+      els.resultDetail.textContent = won
+        ? `ทายถูกใน ${winner.rows.length} รอบ · รหัสคือตัวเลขด้านบน`
+        : `รหัสคือตัวเลขด้านบน · ${game.allowRepeat ? "โหมดซ้ำได้" : "โหมดไม่ซ้ำ"}`;
+    }
+
+    screens.result.hidden = false;
+  }
+
+  function showGate({ first, shuffling }) {
+    const player = currentPlayer();
+    els.gateKicker.textContent = first ? "เริ่มที่" : "ส่งเครื่องให้";
+    els.gateName.textContent = shuffling ? "..." : player.name;
+    els.gateNote.textContent = shuffling
+      ? "กำลังสุ่มคนเล่นก่อน"
+      : "ยังไม่เห็นกระดาษจนกว่าจะกดพร้อม";
+    els.readyBtn.hidden = shuffling;
+    showScreen("gate");
+  }
+
+  function startFromSettings(settings) {
+    const token = (gameToken += 1);
+    game = createGame(settings);
+    if (settings.mode === "solo") {
+      showScreen("play");
+      renderPlay();
+      return;
+    }
+
+    showGate({ first: true, shuffling: true });
+    const names = settings.names;
+    let tick = 0;
+    window.clearInterval(shuffleTimer);
+    shuffleTimer = window.setInterval(() => {
+      if (token !== gameToken) return;
+      els.gateName.textContent = names[tick % names.length];
+      tick += 1;
+    }, 90);
+
+    window.setTimeout(() => {
+      if (token !== gameToken) return;
+      window.clearInterval(shuffleTimer);
+      game.currentIndex = Math.floor(Math.random() * names.length);
+      showGate({ first: true, shuffling: false });
+    }, 1400);
+  }
+
+  function openReview(index) {
+    game.reviewing = true;
+    game.reviewIndex = index;
+    screens.result.hidden = true;
+    showScreen("play");
+    els.reviewPlayers.innerHTML = game.players
+      .map(
+        (player, playerIndex) =>
+          `<button type="button" class="choice" data-review="${playerIndex}" aria-pressed="${playerIndex === index}">${escapeHtml(player.name)}</button>`
+      )
+      .join("");
+    renderPlay();
+  }
+
+  function replaySameSettings() {
+    screens.result.hidden = true;
+    if (game.mode === "online") {
+      resetToSetup();
+      return;
+    }
+    const settings = {
+      mode: game.mode,
+      allowRepeat: game.allowRepeat,
+      roundLimit: game.roundLimit,
+      names: game.players.map((player) => player.name),
+    };
+    startFromSettings(settings);
+  }
+
+  function resetToSetup() {
+    gameToken += 1;
+    window.clearInterval(shuffleTimer);
+    stopGameTimer();
+    leaveOnlineRoom();
+    game = null;
+    online.waiting = false;
+    online.papers = null;
+    screens.result.hidden = true;
+    showScreen("setup");
+  }
+
+  function wsUrl() {
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    return `${proto}//${location.host}`;
+  }
+
+  function ensureSocket() {
+    return new Promise((resolve, reject) => {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        resolve(socket);
+        return;
+      }
+      if (location.protocol === "file:") {
+        reject(new Error("โหมดคนละเครื่องต้องเปิดผ่านเซิร์ฟเวอร์ เช่น npm start แล้วเข้า http://localhost:3000"));
+        return;
+      }
+
+      const ws = new WebSocket(wsUrl());
+      socket = ws;
+
+      const onOpen = () => {
+        cleanup();
+        resolve(ws);
+      };
+      const onError = () => {
+        cleanup();
+        reject(new Error("เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ · รัน npm start ก่อน"));
+      };
+      const cleanup = () => {
+        ws.removeEventListener("open", onOpen);
+        ws.removeEventListener("error", onError);
+      };
+
+      ws.addEventListener("open", onOpen);
+      ws.addEventListener("error", onError);
+      ws.addEventListener("message", (event) => {
+        let msg;
+        try {
+          msg = JSON.parse(event.data);
+        } catch {
+          return;
+        }
+        handleSocketMessage(msg);
+      });
+      ws.addEventListener("close", () => {
+        if (setup.mode === "online" && !screens.setup.hidden === false) {
+          /* ignore */
+        }
+      });
+    });
+  }
+
+  function sendSocket(payload) {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      showPlayError("หลุดจากเซิร์ฟเวอร์");
+      return;
+    }
+    socket.send(JSON.stringify(payload));
+  }
+
+  function leaveOnlineRoom() {
+    if (socket && socket.readyState === WebSocket.OPEN && online.code) {
+      sendSocket({ type: "leave" });
+    }
+    online.code = null;
+    online.you = null;
+    online.players = [];
+  }
+
+  function renderLobby(payload) {
+    online.code = payload.code;
+    online.players = payload.players || [];
+    els.lobbyCode.textContent = payload.code;
+    const mins = Math.floor((payload.roundLimit * (online.secondsPerLine || SECONDS_PER_LINE)) / 60);
+    els.lobbySettings.textContent = `${payload.allowRepeat ? "ซ้ำได้" : "ไม่ซ้ำ"} · ${payload.roundLimit} บรรทัด · เวลารวม ${mins} นาที`;
+
+    const links = [];
+    links.push(`ลิงก์นี้: ${location.origin}`);
+    if (online.lanAddresses?.length) {
+      links.push(`LAN: ${online.lanAddresses.map((ip) => `http://${ip}:${online.port || location.port || 3000}`).join(" · ")}`);
+    }
+    els.lobbyLink.textContent = `${links.join(" · ")} · ให้เพื่อนเปิดลิงก์เดียวกันแล้วกดเข้าร่วมด้วยรหัสนี้`;
+
+    els.lobbyPlayers.innerHTML = online.players
+      .map(
+        (player) => `
+        <li class="player-item">
+          <span>${escapeHtml(player.name)}${player.isHost ? " (เจ้าของห้อง)" : ""}${online.you?.id === player.id ? " · คุณ" : ""}</span>
+        </li>`
+      )
+      .join("");
+
+    const isHost = online.you?.id === payload.hostId;
+    els.lobbyStartBtn.hidden = !isHost;
+    els.lobbyStartBtn.disabled = online.players.length < 2;
+    els.lobbyStartBtn.textContent =
+      online.players.length < 2 ? "รอเพื่อนอย่างน้อย 2 คน" : "เริ่มเกม";
+  }
+
+  function handleSocketMessage(msg) {
+    switch (msg.type) {
+      case "hello":
+        online.lanAddresses = msg.lanAddresses || [];
+        online.port = msg.port;
+        online.secondsPerLine = msg.secondsPerLine || SECONDS_PER_LINE;
+        break;
+      case "error":
+        if (!screens.lobby.hidden) showLobbyError(msg.message);
+        else if (!screens.play.hidden) {
+          online.waiting = false;
+          showPlayError(msg.message);
+          renderPlay();
+        } else showSetupError(msg.message);
+        break;
+      case "joined":
+        online.you = msg.you;
+        online.secondsPerLine = msg.secondsPerLine || SECONDS_PER_LINE;
+        showLobbyError("");
+        showScreen("lobby");
+        renderLobby(msg);
+        break;
+      case "lobby":
+        renderLobby(msg);
+        break;
+      case "started":
+        beginOnlineGame(msg);
+        break;
+      case "waiting":
+        online.players = msg.players || [];
+        online.round = msg.round;
+        if (online.endsAt !== msg.endsAt && msg.endsAt) startGameTimer(msg.endsAt);
+        renderWaitFriends(online.players);
+        break;
+      case "roundResult":
+        applyOnlineRoundResult(msg);
+        break;
+      case "ended":
+        finishOnlineGame(msg);
+        break;
+      case "left":
+        online.code = null;
+        break;
+      default:
+        break;
+    }
+  }
+
+  function beginOnlineGame(msg) {
+    online.round = msg.round;
+    online.waiting = false;
+    online.players = msg.players || [];
+    online.papers = null;
+
+    game = createGame({
+      mode: "online",
+      allowRepeat: msg.allowRepeat,
+      roundLimit: msg.roundLimit,
+      names: [online.you?.name || "คุณ"],
+    });
+    game.secret = null;
+    game.draft = emptyDraft();
+    game.caret = 0;
+    game.phase = "playing";
+
+    startGameTimer(msg.endsAt);
+    showScreen("play");
+    renderPlay();
+  }
+
+  function applyOnlineRoundResult(msg) {
+    if (!game) return;
+    if (msg.yourRow) {
+      game.players[0].rows.push(msg.yourRow);
+    }
+    game.draft = emptyDraft();
+    game.caret = 0;
+    online.waiting = false;
+    online.players = msg.submitted || [];
+
+    if (msg.nextRound) {
+      online.round = msg.nextRound;
+      game.phase = "playing";
+    } else {
+      game.phase = "over";
+    }
+    renderPlay();
+  }
+
+  function finishOnlineGame(msg) {
+    if (!game) {
+      game = createGame({
+        mode: "online",
+        allowRepeat: msg.allowRepeat,
+        roundLimit: msg.roundLimit,
+        names: [online.you?.name || "คุณ"],
+      });
+    }
+    game.secret = msg.secret;
+    game.phase = "over";
+    online.waiting = false;
+    online.papers = msg.papers || [];
+
+    if (online.papers.length) {
+      game.players = online.papers.map((paper) => ({
+        name: paper.name,
+        rows: paper.rows || [],
+        id: paper.id,
+      }));
+      const me = game.players.findIndex((p) => p.id === online.you?.id);
+      if (me >= 0) game.currentIndex = me;
+    }
+
+    renderPlay();
+    showResult(msg);
+  }
+
+  async function startOnlineFlow(settings) {
+    showSetupError("");
+    try {
+      await ensureSocket();
+    } catch (error) {
+      showSetupError(error.message);
+      return;
+    }
+
+    if (settings.action === "create") {
+      sendSocket({
+        type: "create",
+        name: settings.name,
+        allowRepeat: settings.allowRepeat,
+        roundLimit: settings.roundLimit,
+      });
+    } else {
+      sendSocket({
+        type: "join",
+        name: settings.name,
+        code: settings.code,
+      });
+    }
+  }
+
+  document.querySelectorAll("[data-mode]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setup.mode = btn.dataset.mode;
+      setChoiceGroup("[data-mode]", "mode", setup.mode);
+      updateSetupVisibility();
+      showSetupError("");
+    });
+  });
+
+  document.querySelectorAll("[data-online-action]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setup.onlineAction = btn.dataset.onlineAction;
+      setChoiceGroup("[data-online-action]", "onlineAction", setup.onlineAction);
+      updateSetupVisibility();
+      showSetupError("");
+    });
+  });
+
+  document.querySelectorAll("[data-repeat]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setup.allowRepeat = btn.dataset.repeat === "yes";
+      setChoiceGroup("[data-repeat]", "repeat", btn.dataset.repeat);
+    });
+  });
+
+  document.querySelectorAll("[data-limit]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setup.limitRounds = btn.dataset.limit === "yes";
+      setChoiceGroup("[data-limit]", "limit", btn.dataset.limit);
+      updateSetupVisibility();
+    });
+  });
+
+  els.roundsInput.addEventListener("input", updateTimePreview);
+
+  els.addPlayerBtn.addEventListener("click", addPlayerName);
+  els.playerNameInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") addPlayerName();
+  });
+
+  els.playerList.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-remove]");
+    if (!btn || btn.disabled) return;
+    setup.names.splice(Number(btn.dataset.remove), 1);
+    renderPlayerList();
+  });
+
+  els.roomCodeInput.addEventListener("input", () => {
+    els.roomCodeInput.value = els.roomCodeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  });
+
+  els.startBtn.addEventListener("click", () => {
+    const settings = collectSettings();
+    if (settings.error) {
+      showSetupError(settings.error);
+      return;
+    }
+    showSetupError("");
+    if (settings.mode === "online") startOnlineFlow(settings);
+    else startFromSettings(settings);
+  });
+
+  els.lobbyStartBtn.addEventListener("click", () => {
+    showLobbyError("");
+    sendSocket({ type: "start" });
+  });
+
+  els.lobbyLeaveBtn.addEventListener("click", () => {
+    leaveOnlineRoom();
+    showScreen("setup");
+  });
+
+  els.readyBtn.addEventListener("click", () => {
+    game.phase = "playing";
+    game.draft = emptyDraft();
+    game.caret = 0;
+    showScreen("play");
+    renderPlay();
+  });
+
+  els.nextBtn.addEventListener("click", () => {
+    const nxt = nextPlayerIndex(game.currentIndex);
+    if (nxt === null) {
+      showResult();
+      return;
+    }
+    game.currentIndex = nxt;
+    game.phase = "gated";
+    showGate({ first: false, shuffling: false });
+  });
+
+  els.paperBody.addEventListener("click", (event) => {
+    const cell = event.target.closest("[data-draft-cell]");
+    if (!cell || !game || game.phase !== "playing" || game.reviewing || online.waiting) return;
+    game.caret = Number(cell.dataset.draftCell);
+    renderPlay();
+  });
+
+  document.getElementById("keypad").addEventListener("click", (event) => {
+    const key = event.target.closest(".key");
+    if (!key || key.disabled) return;
+    if (key.dataset.digit !== undefined) placeDigit(Number(key.dataset.digit));
+  });
+
+  document.getElementById("backspace-btn").addEventListener("click", backspace);
+  document.getElementById("submit-btn").addEventListener("click", submitGuess);
+
+  document.getElementById("view-papers-btn").addEventListener("click", () => {
+    let index = 0;
+    if (game.mode === "online" && online.you) {
+      const found = game.players.findIndex((p) => p.id === online.you.id || p.name === online.you.name);
+      index = found >= 0 ? found : 0;
+    } else if (game.winnerIndex !== null) {
+      index = game.winnerIndex;
+    }
+    openReview(index);
+  });
+  document.getElementById("play-again-btn").addEventListener("click", replaySameSettings);
+  document.getElementById("home-btn").addEventListener("click", resetToSetup);
+  document.getElementById("review-again-btn").addEventListener("click", replaySameSettings);
+  document.getElementById("review-home-btn").addEventListener("click", resetToSetup);
+  document.getElementById("quit-btn").addEventListener("click", resetToSetup);
+
+  els.reviewPlayers.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-review]");
+    if (!btn) return;
+    openReview(Number(btn.dataset.review));
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (!game || screens.play.hidden || game.phase !== "playing" || game.reviewing || online.waiting) return;
+    if (event.key >= "0" && event.key <= "9") {
+      event.preventDefault();
+      placeDigit(Number(event.key));
+    } else if (event.key === "Backspace") {
+      event.preventDefault();
+      backspace();
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      submitGuess();
+    } else if (event.key === "ArrowLeft") {
+      game.caret = Math.max(0, game.caret - 1);
+      renderPlay();
+    } else if (event.key === "ArrowRight") {
+      game.caret = Math.min(DIGIT_COUNT - 1, game.caret + 1);
+      renderPlay();
+    }
+  });
+
+  renderPlayerList();
+  updateSetupVisibility();
+  showScreen("setup");
+})();

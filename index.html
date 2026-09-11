@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>เกมท้ายตัวเลข</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Itim&family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="desk">
+    <section id="screen-setup" class="screen" hidden>
+      <article class="sheet sheet-setup">
+        <header class="setup-head">
+          <h1>เกมท้ายตัวเลข</h1>
+          <p class="byline">พัฒนาโดย เฮียหนุ่มตองเอ็น</p>
+          <p class="tagline">ทายตัวเลข 4 หลัก ที่โปรแกรมสุ่มไว้ให้</p>
+        </header>
+
+        <div class="field">
+          <p class="label">โหมดการเล่น</p>
+          <div class="choice-row choice-row-3" role="radiogroup" aria-label="โหมดการเล่น">
+            <button type="button" class="choice" data-mode="solo" aria-pressed="true">คนเดียว</button>
+            <button type="button" class="choice" data-mode="multi" aria-pressed="false">ส่งเครื่อง</button>
+            <button type="button" class="choice" data-mode="online" aria-pressed="false">คนละเครื่อง</button>
+          </div>
+        </div>
+
+        <div class="field" id="players-field" hidden>
+          <p class="label">ชื่อผู้เล่น <span class="hint">อย่างน้อย 2 คน · กระดาษแยกกัน · สลับเครื่องเดียวกัน</span></p>
+          <ul id="player-list" class="player-list"></ul>
+          <div class="add-row">
+            <input id="player-name-input" type="text" maxlength="20" placeholder="พิมพ์ชื่อเพื่อน" autocomplete="off" />
+            <button type="button" id="add-player-btn" class="btn btn-ink">เพิ่มชื่อ</button>
+          </div>
+        </div>
+
+        <div class="field" id="online-field" hidden>
+          <p class="label">ชื่อของคุณ</p>
+          <input id="online-name-input" class="full-input" type="text" maxlength="20" placeholder="พิมพ์ชื่อ" autocomplete="off" />
+
+          <p class="label online-sub">สร้างห้องหรือเข้าร่วม</p>
+          <div class="choice-row" role="radiogroup" aria-label="สร้างหรือเข้าร่วม">
+            <button type="button" class="choice" data-online-action="create" aria-pressed="true">สร้างห้อง</button>
+            <button type="button" class="choice" data-online-action="join" aria-pressed="false">เข้าร่วม</button>
+          </div>
+
+          <div id="join-code-row" class="rounds-row" hidden>
+            <label for="room-code-input">รหัสห้อง</label>
+            <input id="room-code-input" type="text" maxlength="4" placeholder="ABCD" autocomplete="off" class="room-code-input" />
+          </div>
+
+          <p id="online-hint" class="hint-block">เพื่อนเปิดลิงก์เซิร์ฟเวอร์เดียวกัน แล้วใส่รหัสห้อง · เวลารวม = จำนวนบรรทัด × 2 นาที</p>
+        </div>
+
+        <div class="field" id="repeat-field">
+          <p class="label">ตัวเลขซ้ำได้ไหม</p>
+          <div class="choice-row" role="radiogroup" aria-label="ตัวเลขซ้ำ">
+            <button type="button" class="choice" data-repeat="no" aria-pressed="true">ไม่ซ้ำ</button>
+            <button type="button" class="choice" data-repeat="yes" aria-pressed="false">ซ้ำได้</button>
+          </div>
+        </div>
+
+        <div class="field" id="rounds-field">
+          <p class="label" id="rounds-label">จำกัดจำนวนรอบไหม</p>
+          <div class="choice-row" id="limit-choices" role="radiogroup" aria-label="จำกัดรอบ">
+            <button type="button" class="choice" data-limit="no" aria-pressed="true">ไม่จำกัด</button>
+            <button type="button" class="choice" data-limit="yes" aria-pressed="false">จำกัดรอบ</button>
+          </div>
+          <div class="rounds-row" id="rounds-row" hidden>
+            <label for="rounds-input" id="rounds-input-label">กี่รอบ</label>
+            <input id="rounds-input" type="number" min="1" max="30" value="10" />
+            <span id="rounds-suffix">รอบต่อคน</span>
+          </div>
+          <p id="time-preview" class="hint-block" hidden></p>
+        </div>
+
+        <p id="setup-error" class="error" hidden></p>
+        <button type="button" id="start-btn" class="btn btn-start">เริ่มเกม</button>
+      </article>
+    </section>
+
+    <section id="screen-lobby" class="screen" hidden>
+      <article class="sheet sheet-setup">
+        <header class="setup-head">
+          <h1>ห้องรอเพื่อน</h1>
+          <p class="byline">รหัสห้อง</p>
+          <p id="lobby-code" class="lobby-code"></p>
+        </header>
+        <p id="lobby-settings" class="hint-block"></p>
+        <p id="lobby-link" class="hint-block"></p>
+        <p class="label">ผู้เล่นในห้อง</p>
+        <ul id="lobby-players" class="player-list"></ul>
+        <p id="lobby-error" class="error" hidden></p>
+        <button type="button" id="lobby-start-btn" class="btn btn-start" hidden>เริ่มเกม</button>
+        <button type="button" id="lobby-leave-btn" class="btn btn-ink lobby-leave">ออกจากห้อง</button>
+      </article>
+    </section>
+
+    <section id="screen-gate" class="screen overlay-screen" hidden>
+      <article class="gate-card">
+        <p id="gate-kicker" class="gate-kicker">ส่งเครื่องให้</p>
+        <p id="gate-name" class="gate-name"></p>
+        <p id="gate-note" class="gate-note">ยังไม่เปิดกระดาษจนกว่าจะกดพร้อม</p>
+        <button type="button" id="ready-btn" class="btn btn-start">พร้อม</button>
+      </article>
+    </section>
+
+    <section id="screen-play" class="screen play-screen" hidden>
+      <div class="play-wrap">
+        <p id="game-timer" class="game-timer" hidden></p>
+        <article class="sheet sheet-play">
+          <table class="paper">
+            <thead>
+              <tr>
+                <th colspan="6">
+                  <div class="paper-head">
+                    <div class="paper-title">
+                      <h1>เกมท้ายตัวเลข</h1>
+                      <p>พัฒนาโดย เฮียหนุ่มตองเอ็น</p>
+                      <p id="paper-owner" class="paper-owner"></p>
+                    </div>
+                    <ul class="legend">
+                      <li><span class="peg black"></span> มีและถูกตำแหน่ง</li>
+                      <li><span class="peg white"></span> มีไม่ถูกตำแหน่ง</li>
+                      <li><span class="peg none"></span> ไม่มีเลย</li>
+                      <li><span class="mark-star">★</span> ถูกต้องแล้ว</li>
+                    </ul>
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody id="paper-body"></tbody>
+          </table>
+        </article>
+
+        <p id="play-status" class="play-status"></p>
+        <p id="wait-friends" class="wait-friends" hidden></p>
+        <p id="play-error" class="error" hidden></p>
+        <button type="button" id="quit-btn" class="quit-btn">ออกจากเกม</button>
+
+        <div id="keypad" class="keypad" hidden>
+          <div class="keys">
+            <button type="button" class="key" data-digit="1">1</button>
+            <button type="button" class="key" data-digit="2">2</button>
+            <button type="button" class="key" data-digit="3">3</button>
+            <button type="button" class="key" data-digit="4">4</button>
+            <button type="button" class="key" data-digit="5">5</button>
+            <button type="button" class="key" data-digit="6">6</button>
+            <button type="button" class="key" data-digit="7">7</button>
+            <button type="button" class="key" data-digit="8">8</button>
+            <button type="button" class="key" data-digit="9">9</button>
+            <button type="button" class="key key-action" id="backspace-btn">ลบ</button>
+            <button type="button" class="key" data-digit="0">0</button>
+            <button type="button" class="key key-send" id="submit-btn">ส่ง</button>
+          </div>
+        </div>
+
+        <div id="after-turn" class="after-turn" hidden>
+          <button type="button" id="next-btn" class="btn btn-start">คนถัดไป</button>
+        </div>
+
+        <div id="review-bar" class="review-bar" hidden>
+          <p class="review-label">ดูกระดาษ</p>
+          <div id="review-players" class="review-players"></div>
+          <div class="review-actions">
+            <button type="button" id="review-again-btn" class="btn btn-ink">เล่นอีกครั้ง</button>
+            <button type="button" id="review-home-btn" class="btn btn-ghost">หน้าตั้งค่า</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-result" class="screen overlay-screen" hidden>
+      <article class="result-card">
+        <p id="result-kicker" class="gate-kicker"></p>
+        <p id="result-title" class="result-title"></p>
+        <p id="result-secret" class="result-secret"></p>
+        <p id="result-detail" class="gate-note"></p>
+        <div class="result-actions">
+          <button type="button" id="view-papers-btn" class="btn btn-ink">ดูกระดาษ</button>
+          <button type="button" id="play-again-btn" class="btn btn-start">เล่นอีกครั้ง</button>
+          <button type="button" id="home-btn" class="btn btn-ghost">หน้าตั้งค่า</button>
+        </div>
+      </article>
+    </section>
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>
