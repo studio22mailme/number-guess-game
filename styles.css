@@ -184,10 +184,12 @@ body {
 }
 
 .tagline {
-  margin-top: 10px;
+  margin: 12px auto 0;
+  max-width: 18.5em;
   color: var(--muted);
   font-size: 0.95rem;
-  line-height: 1.45;
+  line-height: 1.55;
+  text-align: center;
 }
 
 .field {
