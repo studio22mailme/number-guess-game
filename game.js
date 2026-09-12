@@ -124,6 +124,7 @@
     resultDetail: document.getElementById("result-detail"),
     difficultyHint: null,
     setupTagline: document.getElementById("setup-tagline"),
+    onlineBadge: document.getElementById("online-badge"),
     onlineCount: document.getElementById("online-count"),
   };
 
@@ -140,7 +141,10 @@
   let gameToken = 0;
   let timerTick = null;
   let socket = null;
+  let socketPromise = null;
   let roomCatalog = [];
+  let handoffTimer = null;
+  let handoffEndsAt = null;
 
   let online = {
     you: null,
@@ -227,6 +231,9 @@
     Object.entries(screens).forEach(([key, node]) => {
       if (node) node.hidden = key !== name;
     });
+    if (els.onlineBadge) {
+      els.onlineBadge.hidden = name !== "setup" && name !== "login";
+    }
   }
 
   function showSetupError(message) {
@@ -439,7 +446,7 @@
     }
 
     if (els.leaderboardLabel) {
-      els.leaderboardLabel.textContent = "อันดับชนะ · คนละเครื่อง";
+      els.leaderboardLabel.textContent = "อันดับชนะ";
     }
     refreshLeaderboard();
   }
@@ -670,7 +677,10 @@
     const easy = game.columnFeedback;
     const rows = [];
     const paper = document.querySelector(".paper");
-    if (paper) paper.classList.remove("paper-easy");
+    if (paper) {
+      paper.classList.remove("paper-easy", "digits-4", "digits-5");
+      paper.classList.add(`digits-${count}`);
+    }
     const headCell = document.querySelector(".paper thead th");
     if (headCell) headCell.colSpan = 1 + count + 1;
 
@@ -984,7 +994,58 @@
       return;
     }
     els.afterTurn.hidden = false;
-    els.playStatus.textContent = "ตรวจแล้ว · ส่งเครื่องให้คนถัดไปได้";
+    startHandoffCountdown();
+  }
+
+  const HANDOFF_SECONDS = 60;
+
+  function clearHandoffCountdown() {
+    if (handoffTimer) {
+      window.clearInterval(handoffTimer);
+      handoffTimer = null;
+    }
+    handoffEndsAt = null;
+    if (els.nextBtn) {
+      els.nextBtn.disabled = false;
+      els.nextBtn.textContent = "คนถัดไป";
+    }
+  }
+
+  function goToNextPlayer() {
+    clearHandoffCountdown();
+    const nxt = nextPlayerIndex(game.currentIndex);
+    if (nxt === null) {
+      showResult();
+      return;
+    }
+    game.currentIndex = nxt;
+    game.phase = "gated";
+    showGate({ first: false, shuffling: false });
+  }
+
+  function startHandoffCountdown() {
+    clearHandoffCountdown();
+    handoffEndsAt = Date.now() + HANDOFF_SECONDS * 1000;
+    if (els.nextBtn) {
+      els.nextBtn.disabled = true;
+    }
+    const tick = () => {
+      if (!game || game.phase !== "waiting-next") {
+        clearHandoffCountdown();
+        return;
+      }
+      const left = Math.max(0, Math.ceil((handoffEndsAt - Date.now()) / 1000));
+      els.playStatus.textContent = `ตรวจแล้ว · ส่งเครื่องในอีก ${formatDuration(left)}`;
+      if (els.nextBtn) {
+        els.nextBtn.textContent = left > 0 ? `รอ ${formatDuration(left)}` : "คนถัดไป";
+        els.nextBtn.disabled = left > 0;
+      }
+      if (left <= 0) {
+        goToNextPlayer();
+      }
+    };
+    tick();
+    handoffTimer = window.setInterval(tick, 250);
   }
 
   function secretText(secret) {
@@ -992,6 +1053,7 @@
   }
 
   function showResult(extra = null) {
+    clearHandoffCountdown();
     stopGameTimer();
     const onlineEnded = game.mode === "online" && extra && !extra.local;
     const winners = onlineEnded ? extra.winners || [] : [];
@@ -1117,6 +1179,7 @@
   function resetToSetup() {
     gameToken += 1;
     window.clearInterval(shuffleTimer);
+    clearHandoffCountdown();
     stopGameTimer();
     leaveOnlineRoom();
     game = null;
@@ -1137,20 +1200,32 @@
   }
 
   function ensureSocket(options = {}) {
-    return new Promise((resolve, reject) => {
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        resolve(socket);
-        return;
-      }
-      if (location.protocol === "file:") {
-        reject(new Error("ต้องเปิดผ่านเซิร์ฟเวอร์ เช่น npm start"));
-        return;
-      }
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      return Promise.resolve(socket);
+    }
+    if (socketPromise) return socketPromise;
 
+    if (location.protocol === "file:") {
+      return Promise.reject(new Error("ต้องเปิดผ่านเซิร์ฟเวอร์ เช่น npm start"));
+    }
+
+    const previous = socket;
+    socketPromise = new Promise((resolve, reject) => {
       const ws = new WebSocket(wsUrl());
       socket = ws;
+
+      if (previous && previous !== ws) {
+        try {
+          previous.onclose = null;
+          previous.close();
+        } catch {
+          /* ignore */
+        }
+      }
+
       const onOpen = () => {
         cleanup();
+        socketPromise = null;
         resolve(ws);
         if (!options.skipAutoRejoin && readRoomSession()?.code && !online.reconnecting) {
           window.setTimeout(() => {
@@ -1160,6 +1235,8 @@
       };
       const onError = () => {
         cleanup();
+        if (socket === ws) socket = null;
+        socketPromise = null;
         reject(new Error("เชื่อมต่อเซิร์ฟเวอร์ไม่ได้"));
       };
       const cleanup = () => {
@@ -1179,6 +1256,7 @@
       });
       ws.addEventListener("close", () => {
         if (socket === ws) socket = null;
+        if (socketPromise && socket === null) socketPromise = null;
         if (readRoomSession()?.code) {
           window.setTimeout(() => {
             attemptAutoRejoin();
@@ -1186,6 +1264,8 @@
         }
       });
     });
+
+    return socketPromise;
   }
 
   function sendSocket(payload) {
@@ -1220,13 +1300,15 @@
 
     const isHost = online.you?.id === payload.hostId;
     const me = meOnlineState(online.players);
-    const allReady = online.players.length >= 2 && online.players.every((player) => player.ready);
+    const allReady =
+      online.players.length >= 2 &&
+      online.players.every((player) => player.ready || player.isHost);
     const waitingNames = online.players.filter((player) => !player.ready).map((player) => player.name);
 
     els.lobbyPlayers.innerHTML = online.players
       .map((player) => {
-        const readyClass = player.ready ? "is-ready" : "is-wait";
-        const readyText = player.ready ? "พร้อม" : "รอพร้อม";
+        const readyClass = player.ready || player.isHost ? "is-ready" : "is-wait";
+        const readyText = player.isHost ? "หัวห้อง" : player.ready ? "พร้อม" : "รอพร้อม";
         const kick =
           isHost && !player.isHost && !player.ready
             ? `<button type="button" class="btn btn-ink kick-btn" data-kick-id="${escapeHtml(player.id)}">เตะ</button>`
@@ -1242,11 +1324,14 @@
       .join("");
 
     if (els.lobbyReadyBtn) {
-      els.lobbyReadyBtn.hidden = false;
-      const ready = Boolean(me?.ready);
-      els.lobbyReadyBtn.textContent = ready ? "ยกเลิกพร้อม" : "กดพร้อม";
-      els.lobbyReadyBtn.classList.toggle("btn-start", !ready);
-      els.lobbyReadyBtn.classList.toggle("btn-ink", ready);
+      // หัวห้องพร้อมอัตโนมัติ · ไม่ต้องกดพร้อม
+      els.lobbyReadyBtn.hidden = isHost;
+      if (!isHost) {
+        const ready = Boolean(me?.ready);
+        els.lobbyReadyBtn.textContent = ready ? "ยกเลิกพร้อม" : "กดพร้อม";
+        els.lobbyReadyBtn.classList.toggle("btn-start", !ready);
+        els.lobbyReadyBtn.classList.toggle("btn-ink", ready);
+      }
     }
 
     els.lobbyStartBtn.hidden = !isHost;
@@ -1652,14 +1737,8 @@
   });
 
   els.nextBtn.addEventListener("click", () => {
-    const nxt = nextPlayerIndex(game.currentIndex);
-    if (nxt === null) {
-      showResult();
-      return;
-    }
-    game.currentIndex = nxt;
-    game.phase = "gated";
-    showGate({ first: false, shuffling: false });
+    if (els.nextBtn.disabled) return;
+    goToNextPlayer();
   });
 
   els.paperBody.addEventListener("click", (event) => {

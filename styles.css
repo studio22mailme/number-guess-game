@@ -236,18 +236,32 @@ body {
   z-index: 40;
   top: max(10px, env(safe-area-inset-top));
   left: max(10px, env(safe-area-inset-left));
-  padding: 6px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px 6px 9px;
   border: 2px solid var(--line);
   border-radius: 999px;
   background: rgba(255, 250, 243, 0.92);
   color: var(--heading);
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-size: 0.9rem;
+  font-weight: 700;
   box-shadow: 0 4px 0 rgba(43, 58, 92, 0.1);
+}
+
+.online-badge[hidden] {
+  display: none !important;
+}
+
+.online-badge-icon {
+  display: inline-flex;
+  color: var(--heading);
+  line-height: 0;
 }
 
 .online-badge strong {
   color: #0f6f66;
+  min-width: 1ch;
 }
 
 .bot-status {
@@ -981,10 +995,10 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 4px;
+  gap: 3px;
   flex-wrap: nowrap;
   white-space: nowrap;
-  max-width: 100%;
+  max-width: none;
 }
 
 .paper td.feedback .peg,
@@ -994,15 +1008,15 @@ body {
 }
 
 .paper td.feedback {
-  width: 42%;
-  min-width: 0;
+  width: 34%;
+  min-width: 4.8rem;
   font-size: 1rem;
   font-weight: 600;
   letter-spacing: 0;
   background: #fff8ef;
-  padding: 0 8px;
+  padding: 0 4px;
   white-space: nowrap;
-  overflow: hidden;
+  overflow: visible;
   text-align: left;
 }
 
@@ -1014,21 +1028,37 @@ body {
 
 .paper td {
   height: 42px;
-  font-size: 1.2rem;
+  font-size: 1.15rem;
   font-weight: 700;
   background: #fffef9;
 }
 
 .paper td.idx {
-  width: 8%;
-  font-size: 0.95rem;
+  width: 1.7rem;
+  font-size: 0.82rem;
+  padding: 0 2px;
   background: #e7f8ff;
   color: var(--heading);
 }
 
 .paper td.digit {
-  width: 11%;
+  width: auto;
+  padding: 0 2px;
   vertical-align: middle;
+  font-size: 1.1rem;
+}
+
+.paper.digits-5 td.feedback {
+  width: 30%;
+  min-width: 5.2rem;
+}
+
+.paper.digits-5 td.idx {
+  width: 1.5rem;
+}
+
+.paper.digits-5 td.digit {
+  font-size: 1.02rem;
 }
 
 .cell-active {
@@ -1225,28 +1255,50 @@ body {
   }
 
   .peg {
-    width: 11px;
-    height: 11px;
+    width: 10px;
+    height: 10px;
+  }
+
+  .mark-star,
+  .mark-win {
+    font-size: 0.92rem;
   }
 
   .paper td {
     height: 38px;
-    font-size: 1.1rem;
+    font-size: 1.05rem;
+  }
+
+  .paper td.idx {
+    width: 1.45rem;
+    font-size: 0.75rem;
+    padding: 0 1px;
   }
 
   .paper td.digit {
-    width: 11%;
+    width: auto;
+    padding: 0 1px;
+    font-size: 1rem;
   }
 
   .paper td.feedback {
-    width: 44%;
-    min-width: 0;
+    width: 36%;
+    min-width: 4.6rem;
     font-size: 0.85rem;
     letter-spacing: 0;
-    padding: 0 6px;
+    padding: 0 3px;
     white-space: nowrap;
-    overflow: hidden;
+    overflow: visible;
     text-align: left;
+  }
+
+  .paper.digits-5 td.feedback {
+    width: 32%;
+    min-width: 5rem;
+  }
+
+  .feedback-pegs {
+    gap: 2px;
   }
 
   .sheet-play {

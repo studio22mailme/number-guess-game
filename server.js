@@ -67,6 +67,11 @@ let admin = null;
 let db = null;
 
 function broadcastPresence() {
+  for (const client of [...presenceClients]) {
+    if (!client || client.readyState !== 1) {
+      presenceClients.delete(client);
+    }
+  }
   const onlineCount = presenceClients.size;
   for (const client of presenceClients) {
     send(client, "presence", { onlineCount });
@@ -741,7 +746,9 @@ function startGame(ws) {
     send(ws, "error", { message: "ต้องมีอย่างน้อย 2 คน" });
     return;
   }
-  const notReady = [...room.players.values()].filter((player) => !player.ready);
+  const notReady = [...room.players.values()].filter(
+    (player) => !player.ready && player.id !== room.hostId
+  );
   if (notReady.length) {
     send(ws, "error", {
       message: `รอเพื่อนกดพร้อมก่อน: ${notReady.map((player) => player.name).join(", ")}`,
@@ -954,6 +961,8 @@ function removePlayerFromRoom(room, playerId) {
 
   if (room.hostId === playerId) {
     room.hostId = room.players.keys().next().value;
+    const newHost = room.players.get(room.hostId);
+    if (newHost) newHost.ready = true;
   }
 
   if (room.status === "playing") {
