@@ -237,7 +237,7 @@
     const rounds = Number(els.roundsInput.value) || 0;
     const mins = Math.floor((rounds * SECONDS_PER_LINE) / 60);
     els.timePreview.hidden = false;
-    els.timePreview.textContent = `เวลารวมทั้งเกม ${mins} นาที (${rounds} บรรทัด × 2 นาที) · ทุกคนทายพร้อมกัน รอส่งครบทุกคนค่อยขึ้นบรรทัดถัดไป`;
+    els.timePreview.textContent = `เวลารวมทั้งเกม ${mins} นาที (${rounds} บรรทัด × 2 นาที) · ทายพร้อมกัน · มีคนทายถูก = จบทันที`;
   }
 
   function updateSetupVisibility() {

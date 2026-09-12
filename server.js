@@ -647,8 +647,10 @@ function submitGuess(ws, msg) {
     endsAt: room.endsAt,
   });
 
+  // ทายถูกทันที = จบเกม ไม่ต้องรอเพื่อนส่ง
+  const instantWin = evaluateGuess(digits, room.secret).win;
   const allIn = [...room.players.values()].every((item) => item.pending);
-  if (allIn) finishRound(room);
+  if (instantWin || allIn) finishRound(room);
 }
 
 function leaveCurrent(ws) {
