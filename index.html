@@ -16,8 +16,8 @@
     <span class="blob blob-c"></span>
     <span class="dot-grid"></span>
   </div>
-  <button type="button" id="music-toggle" class="music-toggle" aria-pressed="false" title="เปิดเพลง Lofi">
-    ♪ เพลง
+  <button type="button" id="music-toggle" class="music-toggle" aria-pressed="false" aria-label="เปิดเพลง" title="เปิดเพลง">
+    <span class="music-icon" aria-hidden="true">🔊</span>
   </button>
   <div class="desk">
     <section id="screen-login" class="screen" hidden>
@@ -77,14 +77,6 @@
             <button type="button" class="choice" data-difficulty="hard" aria-pressed="false">ยาก</button>
             <button type="button" class="choice" data-difficulty="extreme" aria-pressed="false">ยากมาก</button>
           </div>
-          <p id="difficulty-hint" class="hint-block">ปกติ · ทายเลข 4 หลัก · สัญลักษณ์รวมด้านขวา</p>
-        </div>
-
-        <div class="field leaderboard-field">
-          <p class="label" id="leaderboard-label">อันดับชนะ · คนเดียว</p>
-          <ol id="leaderboard-list" class="leaderboard-list">
-            <li class="empty-players">ยังไม่มีสถิติ</li>
-          </ol>
         </div>
 
         <div class="field" id="players-field" hidden>
@@ -143,6 +135,13 @@
         <p id="setup-error" class="error" hidden></p>
         <button type="button" id="start-btn" class="btn btn-start">เริ่มเกม</button>
       </article>
+
+      <aside class="leaderboard-below" aria-label="สถิติ">
+        <p class="label" id="leaderboard-label">อันดับชนะ · คนเดียว</p>
+        <ol id="leaderboard-list" class="leaderboard-list">
+          <li class="empty-players">ยังไม่มีสถิติ</li>
+        </ol>
+      </aside>
     </section>
 
     <section id="screen-lobby" class="screen" hidden>
@@ -200,11 +199,6 @@
           </table>
         </article>
 
-        <p id="play-status" class="play-status"></p>
-        <p id="wait-friends" class="wait-friends" hidden></p>
-        <p id="play-error" class="error" hidden></p>
-        <button type="button" id="quit-btn" class="quit-btn">ออกจากเกม</button>
-
         <div id="keypad" class="keypad" hidden>
           <div class="keys">
             <button type="button" class="key" data-digit="1">1</button>
@@ -233,6 +227,13 @@
             <button type="button" id="review-again-btn" class="btn btn-ink">เล่นอีกครั้ง</button>
             <button type="button" id="review-home-btn" class="btn btn-ghost">หน้าตั้งค่า</button>
           </div>
+        </div>
+
+        <div class="play-footer">
+          <p id="play-status" class="play-status"></p>
+          <p id="wait-friends" class="wait-friends" hidden></p>
+          <p id="play-error" class="error" hidden></p>
+          <button type="button" id="quit-btn" class="quit-btn">ออกจากเกม</button>
         </div>
       </div>
     </section>

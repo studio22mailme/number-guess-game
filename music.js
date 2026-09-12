@@ -358,8 +358,10 @@
     if (!btn) return;
     const on = playing && !muted;
     btn.setAttribute("aria-pressed", on ? "true" : "false");
-    btn.title = on ? "ปิดเพลง" : "เปิดเพลง Lofi";
-    btn.textContent = on ? "♪ เปิดอยู่" : "♪ เพลง";
+    btn.title = on ? "ปิดเพลง" : "เปิดเพลง";
+    btn.setAttribute("aria-label", on ? "ปิดเพลง" : "เปิดเพลง");
+    const icon = btn.querySelector(".music-icon");
+    if (icon) icon.textContent = on ? "🔊" : "🔇";
   }
 
   function mountToggle() {

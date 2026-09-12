@@ -116,7 +116,7 @@
     resultTitle: document.getElementById("result-title"),
     resultSecret: document.getElementById("result-secret"),
     resultDetail: document.getElementById("result-detail"),
-    difficultyHint: document.getElementById("difficulty-hint"),
+    difficultyHint: null,
     setupTagline: document.getElementById("setup-tagline"),
   };
 
@@ -254,8 +254,11 @@
     return '<span class="peg none"></span>';
   }
 
-  function feedbackMarkup(row) {
+  function feedbackMarkup(row, easy = false) {
     const count = row.guess?.length || digitCount();
+    if (easy && Array.isArray(row.marks)) {
+      return `<span class="feedback-pegs">${row.marks.map((kind) => markIcon(kind)).join("")}</span>`;
+    }
     if (row.win) {
       return `<span class="feedback-pegs">${'<span class="mark-star">★</span>'.repeat(count)}</span>`;
     }
@@ -304,7 +307,6 @@
 
   function updateDifficultyUi() {
     const cfg = difficultyConfig(setup.difficulty);
-    if (els.difficultyHint) els.difficultyHint.textContent = cfg.hint;
     if (els.setupTagline) {
       els.setupTagline.innerHTML = `ทายเลข ${cfg.digitCount} หลักให้ถูกก่อนเพื่อน<br />สนุกได้ทั้งเล่นคนเดียวและแข่งทีม`;
     }
@@ -578,9 +580,9 @@
     const easy = game.columnFeedback;
     const rows = [];
     const paper = document.querySelector(".paper");
-    if (paper) paper.classList.toggle("paper-easy", easy);
+    if (paper) paper.classList.remove("paper-easy");
     const headCell = document.querySelector(".paper thead th");
-    if (headCell) headCell.colSpan = 1 + count + (easy ? 0 : 1);
+    if (headCell) headCell.colSpan = 1 + count + 1;
 
     for (let i = 0; i < rowCount; i += 1) {
       const filled = player.rows[i];
@@ -592,20 +594,18 @@
         : isDraftRow || isPendingRow
           ? game.draft
           : Array(count).fill(null);
-      const feedback = !easy && filled ? feedbackMarkup(filled) : isPendingRow && !easy ? "รอ…" : "";
+      const feedback = filled
+        ? feedbackMarkup(filled, easy)
+        : isPendingRow
+          ? "รอ…"
+          : "";
       const feedbackClass = filled?.win ? "feedback win" : "feedback";
 
       const digitCells = digits
         .map((digit, digitIndex) => {
           const active = isDraftRow && game.caret === digitIndex ? " cell-active" : "";
           const value = digit === null ? "" : String(digit);
-          let mark = "";
-          if (easy && filled?.marks) {
-            mark = `<span class="digit-mark">${markIcon(filled.marks[digitIndex])}</span>`;
-          } else if (easy) {
-            mark = `<span class="digit-mark"></span>`;
-          }
-          return `<td class="digit${active}"${isDraftRow ? ` data-draft-cell="${digitIndex}"` : ""}><span class="digit-num">${value}</span>${mark}</td>`;
+          return `<td class="digit${active}"${isDraftRow ? ` data-draft-cell="${digitIndex}"` : ""}>${value}</td>`;
         })
         .join("");
 
@@ -613,7 +613,7 @@
         <tr>
           <td class="idx">${i + 1}</td>
           ${digitCells}
-          ${easy ? "" : `<td class="${feedbackClass}">${feedback}</td>`}
+          <td class="${feedbackClass}">${feedback}</td>
         </tr>`);
     }
 
@@ -889,7 +889,7 @@
 
     if (extra?.local && extra.reason === "timeout") {
       els.resultKicker.textContent = "หมดเวลาแล้ว";
-      els.resultTitle.textContent = "ไม่ได้ส่งทัน";
+      els.resultTitle.textContent = "ส่งไม่ทัน";
       els.resultSecret.textContent = secretText();
       els.resultDetail.textContent = `โหมดยากมาก · ต้องตอบภายใน ${game.secondsPerLine} วินาทีต่อรอบ`;
     } else if (onlineEnded) {

@@ -106,9 +106,10 @@ body {
   padding: 16px 12px 24px;
 }
 
-.screen {
-  width: min(720px, 100%);
-  animation: pop-in 0.45s cubic-bezier(0.2, 0.9, 0.2, 1);
+#screen-setup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 @keyframes pop-in {
@@ -325,6 +326,20 @@ body {
   list-style: none;
   display: grid;
   gap: 8px;
+  margin-bottom: 8px;
+}
+
+.leaderboard-below {
+  width: min(560px, 100%);
+  margin: 14px auto 0;
+  padding: 14px 16px;
+  border: 3px solid rgba(43, 58, 92, 0.18);
+  border-radius: var(--radius);
+  background: rgba(255, 250, 243, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.leaderboard-below .label {
   margin-bottom: 8px;
 }
 
@@ -606,7 +621,7 @@ body {
 }
 
 .play-screen {
-  width: min(760px, 100%);
+  width: min(820px, 100%);
 }
 
 .play-wrap {
@@ -618,6 +633,13 @@ body {
 .sheet-play {
   overflow: auto;
   max-height: min(62dvh, 720px);
+}
+
+.play-footer {
+  display: grid;
+  gap: 8px;
+  order: 99;
+  margin-top: 4px;
 }
 
 .paper {
@@ -732,6 +754,8 @@ body {
   border-radius: 50%;
   vertical-align: middle;
   flex: 0 0 auto;
+  flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .peg.black {
@@ -761,14 +785,16 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 7px;
   flex-wrap: nowrap;
   white-space: nowrap;
+  min-width: 4.75rem;
 }
 
 .paper td.feedback .peg,
 .paper td.feedback .mark-star {
   margin: 0;
+  flex: 0 0 auto;
 }
 
 .paper td {
@@ -779,48 +805,27 @@ body {
 }
 
 .paper td.idx {
-  width: 9%;
+  width: 8%;
   font-size: 0.95rem;
   background: #e7f8ff;
   color: #1b3358;
 }
 
 .paper td.digit {
-  width: 12%;
+  width: 11%;
   vertical-align: middle;
 }
 
-.paper td.digit .digit-num {
-  display: block;
-  line-height: 1.1;
-}
-
-.paper td.digit .digit-mark {
-  display: flex;
-  justify-content: center;
-  margin-top: 2px;
-  min-height: 14px;
-}
-
-.paper.paper-easy td.feedback {
-  display: none;
-}
-
-.paper.paper-easy td.digit {
-  width: 18%;
-  height: auto;
-  padding: 4px 2px 6px;
-}
-
 .paper td.feedback {
-  width: 43%;
-  min-width: 5.5rem;
+  width: 48%;
+  min-width: 6.5rem;
   font-size: 1rem;
   font-weight: 600;
   letter-spacing: 0;
   background: #fff8ef;
-  padding: 0 10px;
+  padding: 0 12px;
   white-space: nowrap;
+  overflow: visible;
 }
 
 .paper td.feedback.win {
@@ -1006,16 +1011,21 @@ body {
   }
 
   .paper td.feedback {
-    width: 46%;
-    min-width: 5.25rem;
+    width: 50%;
+    min-width: 6.25rem;
     font-size: 0.9rem;
     letter-spacing: 0;
-    padding: 0 8px;
+    padding: 0 10px;
     white-space: nowrap;
   }
 
   .sheet-play {
     max-height: 50dvh;
+  }
+
+  .leaderboard-below {
+    margin-top: 12px;
+    padding: 12px;
   }
 
   .key {
@@ -1026,20 +1036,30 @@ body {
 .music-toggle {
   position: fixed;
   z-index: 50;
-  top: max(12px, env(safe-area-inset-top));
-  right: max(12px, env(safe-area-inset-right));
-  min-width: 7.4rem;
-  padding: 0.6rem 1rem;
-  border: 3px solid var(--line);
-  border-radius: 999px;
-  background: var(--sun);
+  top: max(10px, env(safe-area-inset-top));
+  right: max(10px, env(safe-area-inset-right));
+  width: 42px;
+  height: 42px;
+  min-width: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--line);
+  border-radius: 50%;
+  background: rgba(255, 250, 243, 0.92);
   color: var(--ink);
   font: inherit;
-  font-size: 0.95rem;
-  font-weight: 700;
-  box-shadow: 0 8px 0 rgba(43, 58, 92, 0.14);
+  font-size: 1.15rem;
+  line-height: 1;
+  box-shadow: 0 4px 0 rgba(43, 58, 92, 0.12);
   cursor: pointer;
   transition: transform 0.12s ease, background 0.15s ease, box-shadow 0.12s ease;
+}
+
+.music-toggle .music-icon {
+  display: block;
+  transform: translateY(1px);
 }
 
 .music-toggle:hover {
@@ -1048,7 +1068,7 @@ body {
 
 .music-toggle:active {
   transform: translateY(2px);
-  box-shadow: 0 4px 0 rgba(43, 58, 92, 0.12);
+  box-shadow: 0 2px 0 rgba(43, 58, 92, 0.12);
 }
 
 .music-toggle[aria-pressed="true"] {
@@ -1056,7 +1076,7 @@ body {
 }
 
 .music-toggle[aria-pressed="false"] {
-  background: var(--sun);
+  background: rgba(255, 250, 243, 0.92);
 }
 
 @media (prefers-reduced-motion: reduce) {
