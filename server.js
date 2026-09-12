@@ -109,6 +109,8 @@ function publicPlayers(room) {
     uid: player.uid || null,
     isHost: player.id === room.hostId,
     submitted: Boolean(player.pending),
+    botMode: Boolean(player.botMode),
+    fromBot: Boolean(player.pending?.fromBot),
   }));
 }
 
@@ -202,6 +204,61 @@ function evaluateGuess(guess, secret) {
     win: blacks === DIGIT_COUNT,
     none: blacks === 0 && whites === 0,
   };
+}
+
+function enumerateCodes(allowRepeat) {
+  const codes = [];
+  const walk = (prefix) => {
+    if (prefix.length === DIGIT_COUNT) {
+      codes.push([...prefix]);
+      return;
+    }
+    for (let digit = 0; digit <= 9; digit += 1) {
+      if (!allowRepeat && prefix.includes(digit)) continue;
+      prefix.push(digit);
+      walk(prefix);
+      prefix.pop();
+    }
+  };
+  walk([]);
+  return codes;
+}
+
+function chooseBotGuess(history, allowRepeat) {
+  let candidates = enumerateCodes(allowRepeat);
+  for (const row of history) {
+    candidates = candidates.filter((candidate) => {
+      const result = evaluateGuess(row.guess, candidate);
+      return result.blacks === row.blacks && result.whites === row.whites;
+    });
+  }
+  if (!candidates.length) return generateSecret(allowRepeat);
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function assignBotGuess(player, room) {
+  player.pending = {
+    guess: chooseBotGuess(player.rows, room.allowRepeat),
+    fromBot: true,
+  };
+}
+
+function beginRoundClock(room) {
+  room.roundEndsAt = Date.now() + SECONDS_PER_LINE * 1000;
+  for (const player of room.players.values()) {
+    player.pending = null;
+    if (player.botMode) assignBotGuess(player, room);
+  }
+}
+
+function broadcastRoundState(room, type = "waiting") {
+  broadcast(room, type, {
+    round: room.currentRound + 1,
+    players: publicPlayers(room),
+    roundEndsAt: room.roundEndsAt,
+    endsAt: room.roundEndsAt,
+    secondsPerLine: SECONDS_PER_LINE,
+  });
 }
 
 function hashPassword(password) {
@@ -365,24 +422,36 @@ async function endGame(room, reason, winners = []) {
     rows: player.rows,
   }));
 
-  broadcast(room, "ended", {
-    reason,
-    secret: room.secret,
-    winners,
-    papers,
-    allowRepeat: room.allowRepeat,
-    roundLimit: room.roundLimit,
-  });
+  for (const player of room.players.values()) {
+    send(player.ws, "ended", {
+      reason,
+      secret: room.secret,
+      winners,
+      papers: papers.filter((paper) => paper.id === player.id),
+      allowRepeat: room.allowRepeat,
+      roundLimit: room.roundLimit,
+    });
+  }
   broadcastRoomList();
 }
 
 function maybeTimeout(room) {
-  if (room.status !== "playing" || !room.endsAt) return;
-  if (Date.now() < room.endsAt) return;
-  endGame(room, "timeout", []);
+  if (room.status !== "playing" || !room.roundEndsAt) return;
+  if (Date.now() < room.roundEndsAt) return;
+  room.roundEndsAt = null;
+
+  for (const player of room.players.values()) {
+    if (player.pending) continue;
+    player.botMode = true;
+    assignBotGuess(player, room);
+  }
+  finishRound(room);
 }
 
 function finishRound(room) {
+  if (room.status !== "playing") return;
+  room.roundEndsAt = null;
+
   const results = [];
   const winners = [];
 
@@ -390,7 +459,7 @@ function finishRound(room) {
     const pending = player.pending;
     if (!pending) continue;
     const result = evaluateGuess(pending.guess, room.secret);
-    const row = { guess: pending.guess, ...result };
+    const row = { guess: pending.guess, ...result, fromBot: Boolean(pending.fromBot) };
     player.rows.push(row);
     player.pending = null;
     results.push({
@@ -423,11 +492,11 @@ function finishRound(room) {
     return;
   }
 
-  broadcast(room, "waiting", {
-    round: room.currentRound + 1,
-    players: publicPlayers(room),
-    endsAt: room.endsAt,
-  });
+  beginRoundClock(room);
+  broadcastRoundState(room, "waiting");
+  if ([...room.players.values()].every((item) => item.pending)) {
+    finishRound(room);
+  }
 }
 
 async function createRoom(ws, msg) {
@@ -463,6 +532,7 @@ async function createRoom(ws, msg) {
     ws,
     rows: [],
     pending: null,
+    botMode: false,
   };
 
   const room = {
@@ -476,6 +546,7 @@ async function createRoom(ws, msg) {
     secret: null,
     currentRound: 0,
     endsAt: null,
+    roundEndsAt: null,
     timer: null,
     players: new Map([[player.id, player]]),
   };
@@ -548,6 +619,7 @@ async function joinRoom(ws, msg) {
     ws,
     rows: [],
     pending: null,
+    botMode: false,
   };
   room.players.set(player.id, player);
   ws.roomCode = code;
@@ -585,25 +657,32 @@ function startGame(ws) {
   room.status = "playing";
   room.secret = generateSecret(room.allowRepeat);
   room.currentRound = 0;
-  room.endsAt = Date.now() + room.roundLimit * SECONDS_PER_LINE * 1000;
+  room.endsAt = null;
 
   for (const player of room.players.values()) {
     player.rows = [];
     player.pending = null;
+    player.botMode = false;
   }
 
+  beginRoundClock(room);
   clearRoomTimer(room);
-  room.timer = setInterval(() => maybeTimeout(room), 500);
+  room.timer = setInterval(() => maybeTimeout(room), 250);
 
   broadcast(room, "started", {
     round: 1,
     roundLimit: room.roundLimit,
     allowRepeat: room.allowRepeat,
-    endsAt: room.endsAt,
+    roundEndsAt: room.roundEndsAt,
+    endsAt: room.roundEndsAt,
     secondsPerLine: SECONDS_PER_LINE,
     players: publicPlayers(room),
   });
   broadcastRoomList();
+
+  if ([...room.players.values()].every((item) => item.pending)) {
+    finishRound(room);
+  }
 }
 
 function submitGuess(ws, msg) {
@@ -625,8 +704,8 @@ function submitGuess(ws, msg) {
     send(ws, "error", { message: "รอบไม่ตรงกับเซิร์ฟเวอร์" });
     return;
   }
-  if (player.pending) {
-    send(ws, "error", { message: "ส่งคำตอบรอบนี้แล้ว รอเพื่อน" });
+  if (player.pending && !player.pending.fromBot) {
+    send(ws, "error", { message: "ส่งคำตอบรอบนี้แล้ว" });
     return;
   }
 
@@ -640,17 +719,27 @@ function submitGuess(ws, msg) {
     return;
   }
 
-  player.pending = { guess: digits };
-  broadcast(room, "waiting", {
-    round: expectedRound,
-    players: publicPlayers(room),
-    endsAt: room.endsAt,
-  });
+  player.botMode = false;
+  player.pending = { guess: digits, fromBot: false };
+  broadcastRoundState(room, "waiting");
 
-  // ทายถูกทันที = จบเกม ไม่ต้องรอเพื่อนส่ง
+  // ทายถูกทันที = จบเกม
   const instantWin = evaluateGuess(digits, room.secret).win;
   const allIn = [...room.players.values()].every((item) => item.pending);
   if (instantWin || allIn) finishRound(room);
+}
+
+function resumeHuman(ws) {
+  const room = rooms.get(ws.roomCode);
+  if (!room || room.status !== "playing") return;
+  const player = room.players.get(ws.playerId);
+  if (!player) return;
+
+  player.botMode = false;
+  if (player.pending?.fromBot) {
+    player.pending = null;
+  }
+  broadcastRoundState(room, "waiting");
 }
 
 function leaveCurrent(ws) {
@@ -684,11 +773,7 @@ function leaveCurrent(ws) {
       endGame(room, "abandoned", []);
       return;
     }
-    broadcast(room, "waiting", {
-      round: room.currentRound + 1,
-      players: publicPlayers(room),
-      endsAt: room.endsAt,
-    });
+    broadcastRoundState(room, "waiting");
     if (remaining.every((item) => item.pending)) {
       finishRound(room);
     }
@@ -851,6 +936,9 @@ wss.on("connection", (ws) => {
           break;
         case "submit":
           submitGuess(ws, msg);
+          break;
+        case "resume":
+          resumeHuman(ws);
           break;
         case "leave":
           leaveCurrent(ws);

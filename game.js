@@ -187,9 +187,14 @@
   }
 
   function feedbackMarkup(row) {
-    if (row.win) return `<span class="mark-win">★ ถูกต้องแล้ว</span>`;
-    if (row.none) return `<span class="peg none"></span>`;
-    return `${'<span class="peg black"></span>'.repeat(row.blacks)}${'<span class="peg white"></span>'.repeat(row.whites)}`;
+    if (row.win) {
+      return `<span class="feedback-pegs">${'<span class="mark-star">★</span>'.repeat(DIGIT_COUNT)}</span>`;
+    }
+    const parts = [];
+    for (let i = 0; i < row.blacks; i += 1) parts.push('<span class="peg black"></span>');
+    for (let i = 0; i < row.whites; i += 1) parts.push('<span class="peg white"></span>');
+    while (parts.length < DIGIT_COUNT) parts.push('<span class="peg none"></span>');
+    return `<span class="feedback-pegs">${parts.join("")}</span>`;
   }
 
   function currentPlayer() {
@@ -238,7 +243,7 @@
     const rounds = Number(els.roundsInput.value) || 0;
     const mins = Math.floor((rounds * SECONDS_PER_LINE) / 60);
     els.timePreview.hidden = false;
-    els.timePreview.textContent = `เวลารวมทั้งเกม ${mins} นาที (${rounds} บรรทัด × 2 นาที) · ทายพร้อมกัน · มีคนทายถูก = จบทันที`;
+    els.timePreview.textContent = `แต่ละบรรทัดมีเวลา 2 นาที · ส่งได้เลยไม่ต้องรอเพื่อน · ไม่ส่งทัน Bot เล่นแทน`;
   }
 
   function updateSetupVisibility() {
@@ -541,34 +546,67 @@
 
   function startGameTimer(endsAt) {
     stopGameTimer();
+    if (!endsAt) return;
     online.endsAt = endsAt;
     els.gameTimer.hidden = false;
     const tick = () => {
       const left = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
-      els.gameTimer.textContent = `เหลือเวลา ${formatDuration(left)}`;
-      if (left <= 60) els.gameTimer.classList.add("urgent");
+      els.gameTimer.textContent = `เหลือเวลาตอบ ${formatDuration(left)}`;
+      if (left <= 30) els.gameTimer.classList.add("urgent");
       else els.gameTimer.classList.remove("urgent");
     };
     tick();
     timerTick = setInterval(tick, 250);
   }
 
+  function meOnlineState(players) {
+    if (!online.you || !players) return null;
+    return players.find((player) => player.id === online.you.id) || null;
+  }
+
   function renderWaitFriends(players) {
-    if (!players || !online.waiting) {
+    const me = meOnlineState(players);
+    if (!players || (!online.waiting && !me?.botMode)) {
       els.waitFriends.hidden = true;
       return;
     }
-    const waitingNames = players.filter((p) => !p.submitted).map((p) => p.name);
-    const done = players.filter((p) => p.submitted).length;
     els.waitFriends.hidden = false;
-    els.waitFriends.textContent = waitingNames.length
-      ? `ส่งแล้ว · รอเพื่อน (${done}/${players.length}) — ${waitingNames.join(", ")}`
-      : `ส่งแล้ว · รอเพื่อน (${done}/${players.length})`;
+    if (me?.botMode) {
+      els.waitFriends.textContent = me.submitted
+        ? "Bot เล่นแทนอยู่ · แตะหน้าจอเพื่อกลับมาเล่นเอง"
+        : "Bot พร้อมเล่นแทน · แตะหน้าจอเพื่อเล่นเอง";
+      return;
+    }
+    if (online.waiting) {
+      els.waitFriends.textContent = "ส่งแล้ว · รอหมดเวลารอบนี้เพื่อตรวจคำตอบ (ไม่ต้องรอเพื่อน)";
+      return;
+    }
+    els.waitFriends.hidden = true;
+  }
+
+  function signalHumanActivity() {
+    if (!game || game.mode !== "online" || game.phase !== "playing" || game.reviewing) return;
+    const me = meOnlineState(online.players);
+    if (!me?.botMode && !me?.fromBot) return;
+    online.players = (online.players || []).map((player) =>
+      player.id === online.you?.id
+        ? { ...player, botMode: false, submitted: false, fromBot: false }
+        : player
+    );
+    online.waiting = false;
+    try {
+      sendSocket({ type: "resume" });
+    } catch {
+      /* ignore */
+    }
   }
 
   function renderPlay() {
     const player = game.reviewing ? game.players[game.reviewIndex] : currentPlayer();
-    const interactive = !game.reviewing && game.phase === "playing" && !online.waiting;
+    const me = meOnlineState(online.players);
+    const blockedByBot = game.mode === "online" && Boolean(me?.botMode && me?.submitted);
+    const interactive =
+      !game.reviewing && game.phase === "playing" && !online.waiting && !blockedByBot;
     renderPaper(player, interactive);
 
     if (game.reviewing) {
@@ -577,14 +615,14 @@
       els.reviewBar.hidden = false;
       els.waitFriends.hidden = true;
       document.getElementById("quit-btn").hidden = true;
-      els.playStatus.textContent = "จบเกมแล้ว · เปิดดูกระดาษได้";
+      els.playStatus.textContent = "จบเกมแล้ว · ดูกระดาษของตัวเอง";
       showPlayError("");
       return;
     }
 
     document.getElementById("quit-btn").hidden = false;
     els.reviewBar.hidden = true;
-    els.keypad.hidden = game.phase !== "playing";
+    els.keypad.hidden = game.phase !== "playing" || online.waiting || blockedByBot;
     els.afterTurn.hidden = game.phase !== "waiting-next";
 
     if (game.phase === "playing") {
@@ -601,8 +639,7 @@
       updateKeypadState();
     }
 
-    if (game.mode === "online" && online.waiting) {
-      els.keypad.hidden = true;
+    if (game.mode === "online") {
       renderWaitFriends(online.players);
     } else {
       els.waitFriends.hidden = true;
@@ -610,7 +647,10 @@
   }
 
   function placeDigit(digit) {
+    signalHumanActivity();
     if (!game || game.phase !== "playing" || game.reviewing || online.waiting) return;
+    const me = meOnlineState(online.players);
+    if (me?.botMode && me?.submitted) return;
     showPlayError("");
     if (!game.allowRepeat) {
       const duplicate = game.draft.some((value, index) => value === digit && index !== game.caret);
@@ -627,7 +667,10 @@
   }
 
   function backspace() {
+    signalHumanActivity();
     if (!game || game.phase !== "playing" || game.reviewing || online.waiting) return;
+    const me = meOnlineState(online.players);
+    if (me?.botMode && me?.submitted) return;
     showPlayError("");
     if (game.draft[game.caret] !== null) game.draft[game.caret] = null;
     else if (game.caret > 0) {
@@ -638,7 +681,10 @@
   }
 
   function submitGuess() {
+    signalHumanActivity();
     if (!game || game.phase !== "playing" || game.reviewing || online.waiting) return;
+    const me = meOnlineState(online.players);
+    if (me?.botMode && me?.submitted) return;
     showPlayError("");
     if (game.draft.some((digit) => digit === null)) {
       showPlayError("ต้องกรอกตัวเลข 4 หลักทุกครั้ง");
@@ -783,15 +829,24 @@
 
   function openReview(index) {
     game.reviewing = true;
-    game.reviewIndex = index;
+    let reviewIndex = index;
+    if (game.mode === "online" && online.you) {
+      const found = game.players.findIndex((p) => p.id === online.you.id || p.name === online.you.name);
+      reviewIndex = found >= 0 ? found : 0;
+    } else if (game.mode === "multi") {
+      const myName = currentUser()?.displayName;
+      const found = myName ? game.players.findIndex((p) => p.name === myName) : -1;
+      reviewIndex = found >= 0 ? found : Math.max(0, game.winnerIndex ?? 0);
+    } else {
+      reviewIndex = 0;
+    }
+    game.reviewIndex = reviewIndex;
     screens.result.hidden = true;
     showScreen("play");
-    els.reviewPlayers.innerHTML = game.players
-      .map(
-        (player, playerIndex) =>
-          `<button type="button" class="choice" data-review="${playerIndex}" aria-pressed="${playerIndex === index}">${escapeHtml(player.name)}</button>`
-      )
-      .join("");
+    els.reviewPlayers.innerHTML = "";
+    els.reviewPlayers.hidden = true;
+    const label = document.querySelector(".review-label");
+    if (label) label.textContent = "ดูกระดาษของตัวเอง";
     renderPlay();
   }
 
@@ -950,8 +1005,13 @@
       case "waiting":
         online.players = msg.players || [];
         online.round = msg.round;
-        if (online.endsAt !== msg.endsAt && msg.endsAt) startGameTimer(msg.endsAt);
-        renderWaitFriends(online.players);
+        {
+          const ends = msg.roundEndsAt || msg.endsAt;
+          if (ends && online.endsAt !== ends) startGameTimer(ends);
+          const me = meOnlineState(online.players);
+          online.waiting = Boolean(me?.submitted && !me?.botMode);
+        }
+        renderPlay();
         break;
       case "roundResult":
         applyOnlineRoundResult(msg);
@@ -982,7 +1042,7 @@
     game.draft = emptyDraft();
     game.caret = 0;
     game.phase = "playing";
-    startGameTimer(msg.endsAt);
+    startGameTimer(msg.roundEndsAt || msg.endsAt);
     showScreen("play");
     renderPlay();
   }
@@ -1218,14 +1278,7 @@
   document.getElementById("submit-btn").addEventListener("click", submitGuess);
 
   document.getElementById("view-papers-btn").addEventListener("click", () => {
-    let index = 0;
-    if (game.mode === "online" && online.you) {
-      const found = game.players.findIndex((p) => p.id === online.you.id || p.name === online.you.name);
-      index = found >= 0 ? found : 0;
-    } else if (game.winnerIndex !== null) {
-      index = game.winnerIndex;
-    }
-    openReview(index);
+    openReview(0);
   });
   document.getElementById("play-again-btn").addEventListener("click", replaySameSettings);
   document.getElementById("home-btn").addEventListener("click", resetToSetup);
@@ -1233,10 +1286,12 @@
   document.getElementById("review-home-btn").addEventListener("click", resetToSetup);
   document.getElementById("quit-btn").addEventListener("click", resetToSetup);
 
+  screens.play.addEventListener("pointerdown", () => {
+    signalHumanActivity();
+  });
+
   els.reviewPlayers.addEventListener("click", (event) => {
-    const btn = event.target.closest("[data-review]");
-    if (!btn) return;
-    openReview(Number(btn.dataset.review));
+    event.preventDefault();
   });
 
   document.getElementById("login-google-btn").addEventListener("click", async () => {
