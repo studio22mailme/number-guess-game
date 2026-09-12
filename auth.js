@@ -155,10 +155,15 @@
     return Auth.user.getIdToken(true);
   }
 
-  async function fetchLeaderboard(mode) {
-    const key = mode === "multi" ? "multiWins" : mode === "online" ? "onlineWins" : "soloWins";
+  async function fetchLeaderboard(mode, difficulty = "normal") {
+    const diff = difficulty === "easy" || difficulty === "hard" || difficulty === "extreme" ? difficulty : "normal";
+    const modeKey = mode === "multi" ? "multiWins" : mode === "online" ? "onlineWins" : "soloWins";
+    const key = `${modeKey}_${diff}`;
+    const minutesKey = `${key}_minutes`;
     try {
-      const res = await fetch(`/api/leaderboard?mode=${encodeURIComponent(mode)}`);
+      const res = await fetch(
+        `/api/leaderboard?mode=${encodeURIComponent(mode)}&difficulty=${encodeURIComponent(diff)}`
+      );
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.rows)) return data.rows;
@@ -168,17 +173,24 @@
     }
 
     if (!Auth.db) return [];
-    const snap = await Auth.db.collection("stats").orderBy(key, "desc").limit(20).get();
-    return snap.docs.map((doc, index) => {
-      const data = doc.data() || {};
-      return {
-        uid: doc.id,
-        rank: index + 1,
-        name: data.displayName || "ผู้เล่น",
-        photoURL: data.photoURL || "",
-        wins: Number(data[key] || 0),
-      };
-    });
+    try {
+      const snap = await Auth.db.collection("stats").orderBy(key, "desc").limit(20).get();
+      return snap.docs
+        .map((doc, index) => {
+          const data = doc.data() || {};
+          return {
+            uid: doc.id,
+            rank: index + 1,
+            name: data.displayName || "ผู้เล่น",
+            photoURL: data.photoURL || "",
+            wins: Number(data[key] || 0),
+            minutes: Number(data[minutesKey] || 0),
+          };
+        })
+        .filter((row) => row.wins > 0);
+    } catch {
+      return [];
+    }
   }
 
   window.TualekAuth = {

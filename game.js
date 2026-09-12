@@ -129,7 +129,21 @@
     setupTagline: document.getElementById("setup-tagline"),
     onlineBadge: document.getElementById("online-badge"),
     onlineCount: document.getElementById("online-count"),
+    ageResetBtn: document.getElementById("age-reset-btn"),
+    appVersion: document.getElementById("app-version"),
   };
+
+  const APP_VERSION = window.TUALEK_VERSION || "1.2.00";
+  if (els.appVersion) els.appVersion.textContent = `V${APP_VERSION}`;
+
+  const DIFFICULTY_TITLE = {
+    easy: "ง่าย",
+    normal: "ปกติ",
+    hard: "ยาก",
+    extreme: "ยากมาก",
+  };
+
+  let modeCounts = { solo: 0, multi: 0, online: 0 };
 
   const setup = {
     mode: "solo",
@@ -307,6 +321,9 @@
     });
     if (els.onlineBadge) {
       els.onlineBadge.hidden = name !== "setup" && name !== "login";
+    }
+    if (els.ageResetBtn) {
+      els.ageResetBtn.hidden = name !== "setup" && name !== "login";
     }
     syncLeaveGuard();
   }
@@ -541,7 +558,7 @@
       difficultyLabel(room.difficulty),
       `${room.digitCount || 4} หลัก`,
       room.allowRepeat ? "ซ้ำได้" : "ไม่ซ้ำ",
-      `${room.roundLimit} บรรทัด`,
+      `${room.roundLimit} รอบ`,
       `รอบละ ${room.secondsPerLine || DEFAULT_SECONDS_PER_LINE} วิ`,
     ];
     if (room.hasPassword) bits.unshift("มีรหัสผ่าน");
@@ -555,7 +572,32 @@
     }
     const cfg = difficultyConfig(setup.difficulty);
     els.timePreview.hidden = false;
-    els.timePreview.textContent = `แต่ละบรรทัด ${cfg.secondsPerLine === 120 ? "2 นาที" : `${cfg.secondsPerLine} วินาที`} · ไม่ส่งทัน = แถวว่าง ไปรอบถัดไป`;
+    const timeText = cfg.secondsPerLine === 120 ? "2 นาที" : `${cfg.secondsPerLine} วินาที`;
+    els.timePreview.textContent = `บังคับไม่เกินรอบละ ${timeText}ส่งคำตอบ`;
+  }
+
+  function updateModeCountLabels() {
+    document.querySelectorAll("[data-mode-count]").forEach((el) => {
+      const mode = el.dataset.modeCount;
+      const n = Math.max(0, Number(modeCounts[mode]) || 0);
+      el.textContent = `(${n})`;
+    });
+  }
+
+  function reportActivity(mode) {
+    try {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        sendSocket({ type: "activity", mode: mode || null });
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function defaultRoomNameFromNow() {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, "0");
+    return `${p(d.getDate())}${p(d.getMonth() + 1)}${d.getFullYear()}${p(d.getHours())}${p(d.getMinutes())}`;
   }
 
   function updateSetupVisibility() {
@@ -567,9 +609,9 @@
     els.repeatField.hidden = false;
     els.limitChoices.hidden = false;
     els.roundsRow.hidden = !setup.limitRounds;
-    els.roundsLabel.textContent = "จำกัดจำนวนรอบไหม";
-    els.roundsInputLabel.textContent = "กี่รอบ";
-    els.roundsSuffix.textContent = isOnline ? "บรรทัด" : "รอบต่อคน";
+    els.roundsLabel.textContent = "จำนวนรอบคำตอบ";
+    els.roundsInputLabel.textContent = "จำกัด";
+    els.roundsSuffix.textContent = "รอบ";
 
     if (isOnline) {
       els.startBtn.textContent = "เข้าห้อง / สร้างห้อง";
@@ -583,9 +625,10 @@
     }
 
     if (els.leaderboardLabel) {
-      els.leaderboardLabel.textContent = "อันดับชนะ";
+      els.leaderboardLabel.textContent = `อันดับชนะ - ระดับ${DIFFICULTY_TITLE[setup.difficulty] || "ปกติ"}`;
     }
     refreshLeaderboard();
+    updateModeCountLabels();
   }
 
   function setOnlineCount(count) {
@@ -594,12 +637,22 @@
     els.onlineCount.textContent = String(n);
   }
 
+  function setModeCounts(next) {
+    modeCounts = {
+      solo: Math.max(0, Number(next?.solo) || 0),
+      multi: Math.max(0, Number(next?.multi) || 0),
+      online: Math.max(0, Number(next?.online) || 0),
+    };
+    updateModeCountLabels();
+  }
+
   async function refreshOnlineCount() {
     try {
       const res = await fetch("/api/online-count");
       if (!res.ok) return;
       const data = await res.json();
       setOnlineCount(data.onlineCount);
+      if (data.modeCounts) setModeCounts(data.modeCounts);
     } catch {
       /* ignore */
     }
@@ -669,24 +722,33 @@
 
   async function refreshLeaderboard() {
     try {
-      const rows = await window.TualekAuth.fetchLeaderboard("online");
+      const rows = await window.TualekAuth.fetchLeaderboard(setup.mode, setup.difficulty);
       if (!rows.length) {
-        els.leaderboardList.innerHTML = `<li class="empty-players">ยังไม่มีสถิติในโหมดนี้</li>`;
+        els.leaderboardList.innerHTML = `<li class="empty-players">ยังไม่มีสถิติในระดับนี้</li>`;
         return;
       }
       els.leaderboardList.innerHTML = rows
-        .map(
-          (row) => `
+        .map((row) => {
+          const wins = Number(row.wins) || 0;
+          const minutes = Number(row.minutes) || 0;
+          const avg = wins > 0 ? Math.max(1, Math.round(minutes / wins)) : 0;
+          const timeText = wins ? ` · เฉลี่ย ${avg} นาที/เกม` : "";
+          return `
           <li class="leaderboard-item">
             <span class="lb-rank">#${row.rank}</span>
             <span class="lb-name">${escapeHtml(row.name)}</span>
-            <span class="lb-wins">${row.wins} ชนะ</span>
-          </li>`
-        )
+            <span class="lb-wins">${wins} ชนะ${timeText}</span>
+          </li>`;
+        })
         .join("");
     } catch {
       els.leaderboardList.innerHTML = `<li class="empty-players">โหลดสถิติไม่สำเร็จ</li>`;
     }
+  }
+
+  function gameDurationMinutes() {
+    if (!game?.startedAt) return 1;
+    return Math.max(1, Math.round((Date.now() - game.startedAt) / 60000));
   }
 
   async function recordLocalWin(mode) {
@@ -700,6 +762,8 @@
         body: JSON.stringify({
           idToken,
           mode,
+          difficulty: game?.difficulty || setup.difficulty || "normal",
+          durationMinutes: gameDurationMinutes(),
           displayName: user.displayName || "ผู้เล่น",
           photoURL: user.photoURL || "",
         }),
@@ -712,8 +776,7 @@
 
   function collectSettings() {
     if (setup.mode === "online") {
-      const typedName = (els.onlineNameInput?.value || "").trim().slice(0, 20);
-      const name = typedName || (currentUser()?.displayName || "ผู้เล่น").slice(0, 20);
+      const name = (els.onlineNameInput?.value || "").trim().slice(0, 20);
       const code = els.roomCodeInput.value.trim().toUpperCase();
       const roomName = els.roomTitleInput.value.trim().slice(0, 24);
       const password = els.roomPasswordInput.value;
@@ -740,6 +803,7 @@
           code,
           password: joinPassword,
           roundLimit,
+          limitRounds: setup.limitRounds,
           allowRepeat: setup.allowRepeat,
           difficulty: setup.difficulty,
         };
@@ -749,10 +813,11 @@
         mode: "online",
         action: "create",
         name,
-        roomName: roomName || `${name} ห้อง`,
+        roomName: roomName || defaultRoomNameFromNow(),
         password,
         allowRepeat: setup.allowRepeat,
         roundLimit,
+        limitRounds: setup.limitRounds,
         difficulty: setup.difficulty,
       };
     }
@@ -781,6 +846,7 @@
       difficulty: setup.difficulty,
       allowRepeat: setup.allowRepeat,
       roundLimit,
+      limitRounds: setup.limitRounds,
       names,
     };
   }
@@ -796,6 +862,7 @@
       secondsPerLine: cfg.secondsPerLine,
       allowRepeat: settings.allowRepeat,
       roundLimit: settings.roundLimit,
+      limitRounds: Boolean(settings.limitRounds),
       secret: secret || generateSecret(settings.allowRepeat, cfg.digitCount),
       players: settings.names.map((name) => ({ name, rows: [] })),
       currentIndex: 0,
@@ -805,6 +872,7 @@
       winnerIndex: null,
       reviewing: false,
       reviewIndex: 0,
+      startedAt: Date.now(),
     };
   }
 
@@ -1061,8 +1129,10 @@
       const left = remainingRounds(player);
       const repeatText = game.allowRepeat ? "ซ้ำได้" : "ไม่ซ้ำ";
       if (game.mode === "online") {
-        const leftText = left === null ? "" : ` · เหลือ ${left} บรรทัด`;
-        els.playStatus.textContent = `${repeatText} · บรรทัดที่ ${online.round}/${game.roundLimit}${leftText}`;
+        const hasLimit = setup.limitRounds || (game.limitRounds && game.roundLimit);
+        const soloRound = hasLimit && game.roundLimit ? `จำกัด ${game.roundLimit} รอบ` : "ไม่จำกัดรอบ";
+        const leftText = hasLimit && left !== null ? ` · เหลือ ${left} รอบ` : "";
+        els.playStatus.textContent = `${repeatText} · ${soloRound}${leftText}`;
       } else {
         const soloRound = game.roundLimit ? `จำกัด ${game.roundLimit} รอบ` : "ไม่จำกัดรอบ";
         const soloLeft = left === null ? "" : ` · เหลือ ${left} รอบ`;
@@ -1143,12 +1213,7 @@
       game.phase = "over";
       renderPlay();
       if (game.mode === "solo") recordLocalWin("solo");
-      if (game.mode === "multi") {
-        const winnerName = game.players[game.winnerIndex]?.name;
-        if (winnerName && winnerName === (currentUser()?.displayName || "")) {
-          recordLocalWin("multi");
-        }
-      }
+      if (game.mode === "multi") recordLocalWin("multi");
       window.setTimeout(() => showResult(), 450);
       return;
     }
@@ -1248,7 +1313,7 @@
       els.resultDetail.textContent = `โหมดยากมาก · ต้องตอบภายใน ${game.secondsPerLine} วินาทีต่อรอบ`;
     } else if (onlineEnded) {
       if (extra.reason === "timeout") els.resultKicker.textContent = "หมดเวลาแล้ว";
-      else if (extra.reason === "rounds") els.resultKicker.textContent = "ครบทุกบรรทัดแล้ว";
+      else if (extra.reason === "rounds") els.resultKicker.textContent = "ครบทุกรอบแล้ว";
       else if (extra.reason === "abandoned") els.resultKicker.textContent = "คู่แข่งหลุดจากห้อง";
       else els.resultKicker.textContent = won ? "มีคนทายถูกแล้ว" : "จบเกม";
 
@@ -1294,6 +1359,7 @@
   function startFromSettings(settings) {
     const token = (gameToken += 1);
     game = createGame(settings);
+    reportActivity(settings.mode);
     if (settings.mode === "solo") {
       showScreen("play");
       renderPlay();
@@ -1367,6 +1433,7 @@
     online.waiting = false;
     online.papers = null;
     online.botPapers = [];
+    reportActivity(null);
     screens.result.hidden = true;
     if (currentUser()) {
       showScreen("setup");
@@ -1564,10 +1631,12 @@
         online.secondsPerLine = msg.secondsPerLine || DEFAULT_SECONDS_PER_LINE;
         roomCatalog = msg.rooms || [];
         if (msg.onlineCount != null) setOnlineCount(msg.onlineCount);
+        if (msg.modeCounts) setModeCounts(msg.modeCounts);
         renderRoomList();
         break;
       case "presence":
         if (msg.onlineCount != null) setOnlineCount(msg.onlineCount);
+        if (msg.modeCounts) setModeCounts(msg.modeCounts);
         break;
       case "roomList":
         roomCatalog = msg.rooms || [];
@@ -1697,12 +1766,15 @@
       difficulty: msg.difficulty || "normal",
       allowRepeat: msg.allowRepeat,
       roundLimit: msg.roundLimit,
+      limitRounds: setup.limitRounds,
       names: [online.you?.name || "คุณ"],
     });
     game.secret = null;
     game.draft = emptyDraft();
     game.caret = 0;
     game.phase = "playing";
+    game.startedAt = Date.now();
+    reportActivity("online");
     startGameTimer(msg.roundEndsAt || msg.endsAt);
     showScreen("play");
     renderPlay();
@@ -1852,10 +1924,6 @@
       })
       .catch(() => {});
     if (window.TualekMusic?.start) window.TualekMusic.start().catch(() => {});
-    if (!setup.names.length && currentUser()?.displayName) {
-      setup.names = [currentUser().displayName];
-      renderPlayerList();
-    }
     saveSetupSession();
   }
 
@@ -1884,11 +1952,20 @@
       setup.difficulty = btn.dataset.difficulty;
       setChoiceGroup("[data-difficulty]", "difficulty", setup.difficulty);
       updateDifficultyUi();
+      if (els.leaderboardLabel) {
+        els.leaderboardLabel.textContent = `อันดับชนะ - ระดับ${DIFFICULTY_TITLE[setup.difficulty] || "ปกติ"}`;
+      }
+      refreshLeaderboard();
       showSetupError("");
       saveSetupSession();
     });
   });
 
+  if (els.ageResetBtn) {
+    els.ageResetBtn.addEventListener("click", () => {
+      if (window.TualekAge?.reset) window.TualekAge.reset();
+    });
+  }
   document.querySelectorAll("[data-repeat]").forEach((btn) => {
     btn.addEventListener("click", () => {
       setup.allowRepeat = btn.dataset.repeat === "yes";

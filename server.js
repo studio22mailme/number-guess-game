@@ -61,21 +61,39 @@ const MIME = {
 const rooms = new Map();
 const lobbyWatchers = new Set();
 const presenceClients = new Set();
+const clientActivity = new Map();
 const memoryStats = new Map();
 
 let admin = null;
 let db = null;
 
+function computeModeCounts() {
+  const counts = { solo: 0, multi: 0, online: 0 };
+  for (const mode of clientActivity.values()) {
+    if (mode === "solo" || mode === "multi" || mode === "online") counts[mode] += 1;
+  }
+  return counts;
+}
+
 function broadcastPresence() {
   for (const client of [...presenceClients]) {
     if (!client || client.readyState !== 1) {
       presenceClients.delete(client);
+      clientActivity.delete(client);
     }
   }
   const onlineCount = presenceClients.size;
+  const modeCounts = computeModeCounts();
   for (const client of presenceClients) {
-    send(client, "presence", { onlineCount });
+    send(client, "presence", { onlineCount, modeCounts });
   }
+}
+
+function setClientActivity(ws, mode) {
+  const next = mode === "solo" || mode === "multi" || mode === "online" ? mode : null;
+  if (next) clientActivity.set(ws, next);
+  else clientActivity.delete(ws);
+  broadcastPresence();
 }
 
 function initFirebaseAdmin() {
@@ -387,8 +405,24 @@ function modeWinField(mode) {
   return "soloWins";
 }
 
-function bumpMemoryStats(uid, displayName, photoURL, mode) {
+function normalizeDifficulty(value) {
+  if (value === "easy" || value === "hard" || value === "extreme") return value;
+  return "normal";
+}
+
+function difficultyWinField(mode, difficulty) {
+  return `${modeWinField(mode)}_${normalizeDifficulty(difficulty)}`;
+}
+
+function difficultyMinutesField(mode, difficulty) {
+  return `${difficultyWinField(mode, difficulty)}_minutes`;
+}
+
+function bumpMemoryStats(uid, displayName, photoURL, mode, difficulty, durationMinutes) {
   const field = modeWinField(mode);
+  const diffField = difficultyWinField(mode, difficulty);
+  const minutesField = difficultyMinutesField(mode, difficulty);
+  const minutes = Math.max(0, Math.round(Number(durationMinutes) || 0));
   const current = memoryStats.get(uid) || {
     uid,
     displayName: displayName || "ผู้เล่น",
@@ -400,42 +434,57 @@ function bumpMemoryStats(uid, displayName, photoURL, mode) {
   current.displayName = displayName || current.displayName;
   current.photoURL = photoURL || current.photoURL;
   current[field] = Number(current[field] || 0) + 1;
+  current[diffField] = Number(current[diffField] || 0) + 1;
+  current[minutesField] = Number(current[minutesField] || 0) + minutes;
   memoryStats.set(uid, current);
   return current;
 }
 
-async function recordWin({ uid, displayName, photoURL, mode }) {
+async function recordWin({ uid, displayName, photoURL, mode, difficulty, durationMinutes }) {
   if (!uid) return;
-  bumpMemoryStats(uid, displayName, photoURL, mode);
+  const diff = normalizeDifficulty(difficulty);
+  const minutes = Math.max(0, Math.round(Number(durationMinutes) || 0));
+  bumpMemoryStats(uid, displayName, photoURL, mode, diff, minutes);
   if (!db) return;
   const field = modeWinField(mode);
+  const diffField = difficultyWinField(mode, diff);
+  const minutesField = difficultyMinutesField(mode, diff);
   const ref = db.collection("stats").doc(uid);
   await ref.set(
     {
       displayName: displayName || "ผู้เล่น",
       photoURL: photoURL || "",
       [field]: admin.firestore.FieldValue.increment(1),
+      [diffField]: admin.firestore.FieldValue.increment(1),
+      [minutesField]: admin.firestore.FieldValue.increment(minutes),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     },
     { merge: true }
   );
 }
 
-async function getLeaderboard(mode) {
-  const field = modeWinField(mode);
+async function getLeaderboard(mode, difficulty) {
+  const diff = normalizeDifficulty(difficulty);
+  const field = difficultyWinField(mode, diff);
+  const minutesField = difficultyMinutesField(mode, diff);
   if (db) {
     try {
       const snap = await db.collection("stats").orderBy(field, "desc").limit(20).get();
-      return snap.docs.map((doc, index) => {
-        const data = doc.data() || {};
-        return {
-          uid: doc.id,
-          rank: index + 1,
-          name: data.displayName || "ผู้เล่น",
-          photoURL: data.photoURL || "",
-          wins: Number(data[field] || 0),
-        };
-      });
+      return snap.docs
+        .map((doc, index) => {
+          const data = doc.data() || {};
+          const wins = Number(data[field] || 0);
+          const minutes = Number(data[minutesField] || 0);
+          return {
+            uid: doc.id,
+            rank: index + 1,
+            name: data.displayName || "ผู้เล่น",
+            photoURL: data.photoURL || "",
+            wins,
+            minutes,
+          };
+        })
+        .filter((row) => row.wins > 0);
     } catch (error) {
       console.error("leaderboard firestore error:", error.message);
     }
@@ -446,9 +495,10 @@ async function getLeaderboard(mode) {
       name: row.displayName,
       photoURL: row.photoURL,
       wins: Number(row[field] || 0),
+      minutes: Number(row[minutesField] || 0),
     }))
     .filter((row) => row.wins > 0)
-    .sort((a, b) => b.wins - a.wins)
+    .sort((a, b) => b.wins - a.wins || a.minutes - b.minutes)
     .slice(0, 20)
     .map((row, index) => ({ ...row, rank: index + 1 }));
 }
@@ -491,6 +541,11 @@ async function endGame(room, reason, winners = []) {
           displayName: player.name,
           photoURL: player.photoURL || "",
           mode: "online",
+          difficulty: room.difficulty || "normal",
+          durationMinutes: Math.max(
+            1,
+            Math.round((Date.now() - (room.startedAt || Date.now())) / 60000)
+          ),
         });
       } catch (error) {
         console.error("record online win failed:", error.message);
@@ -616,7 +671,7 @@ async function createRoom(ws, msg) {
     return;
   }
   if (!Number.isInteger(roundLimit) || roundLimit < 1 || roundLimit > MAX_ROUNDS) {
-    send(ws, "error", { message: `จำนวนบรรทัดต้องเป็นเลข 1–${MAX_ROUNDS}` });
+    send(ws, "error", { message: `จำนวนรอบต้องเป็นเลข 1–${MAX_ROUNDS}` });
     return;
   }
 
@@ -773,6 +828,7 @@ function startGame(ws) {
   room.secret = generateSecret(room.allowRepeat, room.digitCount);
   room.currentRound = 0;
   room.endsAt = null;
+  room.startedAt = Date.now();
 
   for (const player of room.players.values()) {
     player.rows = [];
@@ -1194,7 +1250,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (urlPath === "/api/online-count") {
-    sendJson(res, 200, { onlineCount: presenceClients.size });
+    sendJson(res, 200, {
+      onlineCount: presenceClients.size,
+      modeCounts: computeModeCounts(),
+    });
     return;
   }
 
@@ -1204,9 +1263,11 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (urlPath === "/api/leaderboard" && method === "GET") {
-    const mode = new URL(req.url, "http://localhost").searchParams.get("mode") || "solo";
-    const rows = await getLeaderboard(mode);
-    sendJson(res, 200, { mode, rows });
+    const params = new URL(req.url, "http://localhost").searchParams;
+    const mode = params.get("mode") || "solo";
+    const difficulty = params.get("difficulty") || "normal";
+    const rows = await getLeaderboard(mode, difficulty);
+    sendJson(res, 200, { mode, difficulty, rows });
     return;
   }
 
@@ -1224,6 +1285,8 @@ const server = http.createServer(async (req, res) => {
         displayName: body.displayName || auth.name,
         photoURL: body.photoURL || auth.picture || "",
         mode,
+        difficulty: body.difficulty || "normal",
+        durationMinutes: body.durationMinutes,
       });
       sendJson(res, 200, { ok: true });
     } catch (error) {
@@ -1267,6 +1330,7 @@ wss.on("connection", (ws) => {
     secondsPerLine: DEFAULT_SECONDS_PER_LINE,
     rooms: publicRoomList(),
     onlineCount: presenceClients.size,
+    modeCounts: computeModeCounts(),
   });
 
   ws.on("message", async (raw) => {
@@ -1283,13 +1347,21 @@ wss.on("connection", (ws) => {
         case "watchRooms":
           lobbyWatchers.add(ws);
           send(ws, "roomList", { rooms: publicRoomList() });
-          send(ws, "presence", { onlineCount: presenceClients.size });
+          send(ws, "presence", {
+            onlineCount: presenceClients.size,
+            modeCounts: computeModeCounts(),
+          });
+          break;
+        case "activity":
+          setClientActivity(ws, msg.mode);
           break;
         case "create":
           await createRoom(ws, msg);
+          if (ws.roomCode) setClientActivity(ws, "online");
           break;
         case "join":
           await joinRoom(ws, msg);
+          if (ws.roomCode) setClientActivity(ws, "online");
           break;
         case "ready":
           setPlayerReady(ws, msg);
@@ -1308,11 +1380,13 @@ wss.on("connection", (ws) => {
           break;
         case "leave":
           leaveCurrent(ws, { intentional: true });
+          setClientActivity(ws, null);
           send(ws, "left", {});
           broadcastRoomList();
           break;
         case "rejoin":
           await rejoinRoom(ws, msg);
+          if (ws.roomCode) setClientActivity(ws, "online");
           break;
         default:
           send(ws, "error", { message: "คำสั่งไม่รู้จัก" });
@@ -1325,6 +1399,7 @@ wss.on("connection", (ws) => {
 
   ws.on("close", () => {
     presenceClients.delete(ws);
+    clientActivity.delete(ws);
     leaveCurrent(ws, { intentional: false });
     broadcastRoomList();
     broadcastPresence();

@@ -27,6 +27,7 @@
     </span>
     <strong id="online-count">0</strong>
   </div>
+  <button type="button" id="age-reset-btn" class="age-reset-btn" title="ตั้งอายุใหม่">Reset</button>
 
   <div id="age-gate" class="age-gate" hidden>
     <article class="age-gate-card" role="dialog" aria-modal="true" aria-labelledby="age-gate-title">
@@ -100,9 +101,9 @@
         <div class="field">
           <p class="label">โหมดการเล่น</p>
           <div class="choice-row choice-row-3" role="radiogroup" aria-label="โหมดการเล่น">
-            <button type="button" class="choice" data-mode="solo" aria-pressed="true">คนเดียว</button>
-            <button type="button" class="choice" data-mode="multi" aria-pressed="false">ส่งเครื่อง</button>
-            <button type="button" class="choice" data-mode="online" aria-pressed="false">คนละเครื่อง</button>
+            <button type="button" class="choice" data-mode="solo" aria-pressed="true">คนเดียว <span class="mode-count" data-mode-count="solo">(0)</span></button>
+            <button type="button" class="choice" data-mode="multi" aria-pressed="false">ส่งเครื่อง <span class="mode-count" data-mode-count="multi">(0)</span></button>
+            <button type="button" class="choice" data-mode="online" aria-pressed="false">คนละเครื่อง <span class="mode-count" data-mode-count="online">(0)</span></button>
           </div>
         </div>
 
@@ -117,7 +118,7 @@
         </div>
 
         <div class="field" id="repeat-field">
-          <p class="label">ตัวเลขซ้ำได้ไหม</p>
+          <p class="label">ตัวเลขซ้ำ</p>
           <div class="choice-row" role="radiogroup" aria-label="ตัวเลขซ้ำ">
             <button type="button" class="choice" data-repeat="no" aria-pressed="true">ไม่ซ้ำ</button>
             <button type="button" class="choice" data-repeat="yes" aria-pressed="false">ซ้ำได้</button>
@@ -125,15 +126,15 @@
         </div>
 
         <div class="field" id="rounds-field">
-          <p class="label" id="rounds-label">จำกัดจำนวนรอบไหม</p>
-          <div class="choice-row" id="limit-choices" role="radiogroup" aria-label="จำกัดรอบ">
+          <p class="label" id="rounds-label">จำนวนรอบคำตอบ</p>
+          <div class="choice-row" id="limit-choices" role="radiogroup" aria-label="จำนวนรอบคำตอบ">
             <button type="button" class="choice" data-limit="no" aria-pressed="true">ไม่จำกัด</button>
             <button type="button" class="choice" data-limit="yes" aria-pressed="false">จำกัดรอบ</button>
           </div>
           <div class="rounds-row" id="rounds-row" hidden>
-            <label for="rounds-input" id="rounds-input-label">กี่รอบ</label>
+            <label for="rounds-input" id="rounds-input-label">จำกัด</label>
             <input id="rounds-input" type="number" min="1" max="30" value="10" />
-            <span id="rounds-suffix">รอบต่อคน</span>
+            <span id="rounds-suffix">รอบ</span>
           </div>
           <p id="time-preview" class="hint-block" hidden></p>
         </div>
@@ -142,29 +143,32 @@
           <p class="label">ชื่อผู้เล่น <span class="hint">อย่างน้อย 2 คน · กระดาษแยกกัน · เล่นเครื่องเดียวกัน</span></p>
           <ul id="player-list" class="player-list"></ul>
           <div class="add-row">
-            <input id="player-name-input" type="text" maxlength="20" placeholder="พิมพ์ชื่อเพื่อน" autocomplete="off" />
+            <input id="player-name-input" type="text" maxlength="20" placeholder="พิมพ์ชื่อผู้เล่น" autocomplete="off" />
             <button type="button" id="add-player-btn" class="btn btn-ink">เพิ่มชื่อ</button>
           </div>
         </div>
 
         <div class="field" id="online-field" hidden>
-          <p class="label">ล็อบบี้ห้องออนไลน์</p>
-          <input id="online-name-input" class="full-input" type="text" maxlength="20" placeholder="ชื่อของคุณในห้อง" value="ผู้เล่น" autocomplete="nickname" />
-          <ul id="room-list" class="room-list">
-            <li class="empty-players">ยังไม่มีห้อง · สร้างห้องใหม่ได้ด้านล่าง</li>
-          </ul>
-          <button type="button" id="refresh-rooms-btn" class="btn btn-ink">รีเฟรชรายชื่อห้อง</button>
+          <input id="online-name-input" class="full-input" type="text" maxlength="20" placeholder="ชื่อของคุณในห้อง" value="" autocomplete="nickname" />
 
-          <p class="label online-sub">สร้างห้องใหม่</p>
-          <input id="room-title-input" class="full-input" type="text" maxlength="24" placeholder="ชื่อห้อง เช่น ห้องเพื่อนซี้" autocomplete="off" />
-          <input id="room-password-input" class="full-input online-gap" type="password" maxlength="20" placeholder="รหัสเข้าห้อง (ว่างได้ = ห้องเปิด)" autocomplete="new-password" />
+          <div class="online-lobby-box" id="online-lobby-box">
+            <p class="label lobby-box-title">ล็อบบี้ห้องออนไลน์</p>
+            <ul id="room-list" class="room-list">
+              <li class="empty-players">ยังไม่มีห้อง · สร้างห้องใหม่ได้ด้านล่าง</li>
+            </ul>
+            <button type="button" id="refresh-rooms-btn" class="btn btn-ink">รีเฟรชรายชื่อห้อง</button>
 
-          <p class="label online-sub">หรือเข้าร่วมด้วยรหัส</p>
-          <div class="rounds-row">
-            <label for="room-code-input">รหัสห้อง</label>
-            <input id="room-code-input" type="text" maxlength="4" placeholder="ABCD" autocomplete="off" class="room-code-input" />
+            <p class="label online-sub">สร้างห้องใหม่</p>
+            <input id="room-title-input" class="full-input" type="text" maxlength="24" placeholder="ชื่อห้อง (ว่าง = ใช้วันเวลาอัตโนมัติ)" autocomplete="off" />
+            <input id="room-password-input" class="full-input online-gap" type="password" maxlength="20" placeholder="รหัสเข้าห้อง (ว่างได้ = ห้องเปิด)" autocomplete="new-password" />
+
+            <p class="label online-sub">หรือเข้าร่วมด้วยรหัส</p>
+            <div class="join-code-row">
+              <label for="room-code-input">รหัสห้อง</label>
+              <input id="room-code-input" type="text" maxlength="4" placeholder="ABCD" autocomplete="off" class="room-code-input" />
+            </div>
+            <input id="join-password-input" class="full-input online-gap" type="password" maxlength="20" placeholder="รหัสผ่านห้อง (ถ้ามีล็อก)" autocomplete="current-password" />
           </div>
-          <input id="join-password-input" class="full-input online-gap" type="password" maxlength="20" placeholder="รหัสผ่านห้อง (ถ้ามีล็อก)" autocomplete="current-password" />
         </div>
 
         <p id="setup-error" class="error" hidden></p>
@@ -313,10 +317,13 @@
     </article>
   </div>
 
+  <p id="app-version" class="app-version" aria-label="เวอร์ชันแอป">V1.2.00</p>
+
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
+  <script src="version.js"></script>
   <script src="auth.js"></script>
   <script src="age.js"></script>
   <script src="music.js"></script>

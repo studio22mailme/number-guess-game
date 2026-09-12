@@ -135,6 +135,16 @@
     }
   }
 
+  function resetAge() {
+    localStorage.removeItem(BIRTH_YEAR_KEY);
+    localStorage.removeItem(LEGACY_AGE_KEY);
+    const input = document.getElementById("age-input");
+    if (input) input.value = "";
+    showAgeError("");
+    applyAgeTheme(25);
+    showAgeGate();
+  }
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", mountAgeGate);
   } else {
@@ -147,5 +157,7 @@
     getBand: () => ageBand(readCurrentAge() ?? 25),
     apply: applyAgeTheme,
     save: saveAge,
+    showGate: showAgeGate,
+    reset: resetAge,
   };
 })();
