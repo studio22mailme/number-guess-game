@@ -317,16 +317,30 @@
 
   async function start() {
     if (!ensureCtx()) return false;
-    if (ctx.state === "suspended") await ctx.resume();
+    try {
+      if (ctx.state === "suspended") await ctx.resume();
+    } catch {
+      /* blocked until gesture */
+    }
+
+    muted = false;
+    localStorage.setItem(STORAGE_KEY, "1");
+
+    // ยังไม่ปลดล็อกเสียงจริง → อย่าทำเครื่องหมายว่าเล่นแล้ว
+    if (ctx.state !== "running") {
+      syncToggle();
+      armUnlockGestures();
+      return false;
+    }
+
     if (playing) {
-      muted = false;
       setMasterMute(false);
-      localStorage.setItem(STORAGE_KEY, "1");
+      nextNoteTime = Math.max(nextNoteTime, ctx.currentTime + 0.05);
       syncToggle();
       return true;
     }
+
     playing = true;
-    muted = false;
     startedOnce = true;
     step = 0;
     barIndex = 0;
@@ -334,7 +348,6 @@
     nextNoteTime = ctx.currentTime + 0.08;
     startCrackle();
     setMasterMute(false);
-    localStorage.setItem(STORAGE_KEY, "1");
     scheduleBarSlice();
     syncToggle();
     return true;
@@ -355,8 +368,12 @@
 
   async function toggle() {
     if (!ensureCtx()) return;
-    if (ctx.state === "suspended") await ctx.resume();
-    if (playing && !muted) stop();
+    try {
+      if (ctx.state === "suspended") await ctx.resume();
+    } catch {
+      /* ignore */
+    }
+    if (playing && !muted && ctx.state === "running") stop();
     else await start();
   }
 
@@ -389,19 +406,50 @@
     syncToggle();
   }
 
-  // Try to start immediately; browsers may still require a gesture
+  let unlockBound = false;
+
+  function teardownUnlockGestures() {
+    if (!unlockBound) return;
+    unlockBound = false;
+    document.removeEventListener("pointerdown", unlockFromGesture, true);
+    document.removeEventListener("touchstart", unlockFromGesture, true);
+    document.removeEventListener("keydown", unlockFromGesture, true);
+    document.removeEventListener("click", unlockFromGesture, true);
+    window.removeEventListener("focus", unlockFromGesture);
+    document.removeEventListener("visibilitychange", unlockFromVisibility);
+  }
+
+  async function unlockFromGesture() {
+    if (!preferMusicOn()) {
+      teardownUnlockGestures();
+      return;
+    }
+    const ok = await start();
+    if (ok) teardownUnlockGestures();
+  }
+
+  function unlockFromVisibility() {
+    if (document.visibilityState === "visible") unlockFromGesture();
+  }
+
+  function armUnlockGestures() {
+    if (!preferMusicOn() || unlockBound) return;
+    if (playing && ctx && ctx.state === "running") return;
+    unlockBound = true;
+    document.addEventListener("pointerdown", unlockFromGesture, true);
+    document.addEventListener("touchstart", unlockFromGesture, { capture: true, passive: true });
+    document.addEventListener("keydown", unlockFromGesture, true);
+    document.addEventListener("click", unlockFromGesture, true);
+    window.addEventListener("focus", unlockFromGesture);
+    document.addEventListener("visibilitychange", unlockFromVisibility);
+  }
+
   function armAutoStart() {
-    if (!preferMusicOn() || startedOnce) return;
-    start().catch(() => {});
-    const once = () => {
-      document.removeEventListener("pointerdown", once);
-      document.removeEventListener("keydown", once);
-      document.removeEventListener("touchstart", once);
-      if (preferMusicOn()) start();
-    };
-    document.addEventListener("pointerdown", once, { once: true });
-    document.addEventListener("keydown", once, { once: true });
-    document.addEventListener("touchstart", once, { once: true });
+    if (!preferMusicOn()) return;
+    start().then((ok) => {
+      if (!ok) armUnlockGestures();
+    });
+    armUnlockGestures();
   }
 
   if (document.readyState === "loading") {
@@ -414,5 +462,10 @@
     armAutoStart();
   }
 
-  window.TualekMusic = { start, stop, toggle, isOn: () => playing && !muted };
+  window.TualekMusic = {
+    start,
+    stop,
+    toggle,
+    isOn: () => preferMusicOn() && playing && !muted && ctx?.state === "running",
+  };
 })();
