@@ -1027,7 +1027,8 @@
     clearHandoffCountdown();
     handoffEndsAt = Date.now() + HANDOFF_SECONDS * 1000;
     if (els.nextBtn) {
-      els.nextBtn.disabled = true;
+      els.nextBtn.disabled = false;
+      els.nextBtn.textContent = "คนถัดไป";
     }
     const tick = () => {
       if (!game || game.phase !== "waiting-next") {
@@ -1035,11 +1036,10 @@
         return;
       }
       const left = Math.max(0, Math.ceil((handoffEndsAt - Date.now()) / 1000));
-      els.playStatus.textContent = `ตรวจแล้ว · ส่งเครื่องในอีก ${formatDuration(left)}`;
-      if (els.nextBtn) {
-        els.nextBtn.textContent = left > 0 ? `รอ ${formatDuration(left)}` : "คนถัดไป";
-        els.nextBtn.disabled = left > 0;
-      }
+      els.playStatus.textContent =
+        left > 0
+          ? `ตรวจแล้ว · กดคนถัดไปได้เลย หรือรออีก ${formatDuration(left)}`
+          : "ตรวจแล้ว · กำลังส่งเครื่องให้คนถัดไป";
       if (left <= 0) {
         goToNextPlayer();
       }
