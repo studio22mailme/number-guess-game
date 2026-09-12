@@ -604,16 +604,11 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  width: min(440px, 100%);
-  margin: 0 auto;
 }
 
 .sheet-play {
   overflow: auto;
-  max-height: min(58dvh, 640px);
-  max-width: 420px;
-  margin: 0 auto;
-  padding: 10px 8px 12px;
+  max-height: min(62dvh, 720px);
 }
 
 .paper {
@@ -722,8 +717,8 @@ body {
 
 .peg {
   display: inline-block;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   border: 2px solid var(--line);
   border-radius: 50%;
   vertical-align: middle;
@@ -746,7 +741,7 @@ body {
 
 .mark-star,
 .mark-win {
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   letter-spacing: 0;
   color: #c45c00;
   font-weight: 700;
@@ -757,8 +752,9 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 6px;
   width: 100%;
+  min-width: 4.5rem;
 }
 
 .paper td.feedback .peg,
@@ -767,30 +763,30 @@ body {
 }
 
 .paper td {
-  height: 38px;
-  font-size: 1.15rem;
+  height: 40px;
+  font-size: 1.1rem;
   font-weight: 700;
   background: #fffef9;
 }
 
 .paper td.idx {
-  width: 10%;
-  font-size: 0.9rem;
+  width: 8%;
+  font-size: 0.85rem;
   background: #e7f8ff;
   color: #1b3358;
 }
 
 .paper td.digit {
-  width: 15%;
+  width: 11%;
 }
 
 .paper td.feedback {
-  width: 30%;
+  width: 48%;
   font-size: 0.95rem;
   font-weight: 600;
   letter-spacing: 0;
   background: #fff8ef;
-  padding: 0 4px;
+  padding: 0 8px;
 }
 
 .paper td.feedback.win {
