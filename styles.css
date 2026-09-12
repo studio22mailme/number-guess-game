@@ -260,6 +260,112 @@ body {
   padding: 10px 12px;
 }
 
+.login-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.demo-login {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.user-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 10px;
+  border: 3px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.user-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  object-fit: cover;
+  background: #fff;
+}
+
+.user-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.user-name {
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.user-note {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.user-logout {
+  min-height: 40px;
+  padding: 8px 12px;
+}
+
+.leaderboard-list,
+.room-list {
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.leaderboard-item,
+.room-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 3px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  padding: 10px 12px;
+}
+
+.lb-rank {
+  font-weight: 700;
+  color: #0f6f66;
+  min-width: 2.2em;
+}
+
+.lb-name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.lb-wins {
+  font-weight: 700;
+}
+
+.room-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.room-meta {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.room-join-btn {
+  min-height: 40px;
+  padding: 8px 12px;
+}
+
+.online-gap {
+  margin-top: 8px;
+}
+
 .lobby-code {
   font-family: "Mitr", "Prompt", sans-serif;
   font-size: clamp(2.4rem, 10vw, 3.4rem);

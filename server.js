@@ -2,6 +2,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const crypto = require("crypto");
 const { WebSocketServer } = require("ws");
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -10,6 +11,7 @@ const MAX_PLAYERS = 8;
 const MAX_ROUNDS = 30;
 const SECONDS_PER_LINE = 120;
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const ALLOW_DEMO_AUTH = process.env.ALLOW_DEMO_AUTH !== "0";
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -23,6 +25,45 @@ const MIME = {
 };
 
 const rooms = new Map();
+const lobbyWatchers = new Set();
+const memoryStats = new Map();
+
+let admin = null;
+let db = null;
+
+function initFirebaseAdmin() {
+  try {
+    const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+    if (!raw) {
+      console.log("Firebase Admin: ยังไม่มี FIREBASE_SERVICE_ACCOUNT · ใช้สถิติในหน่วยความจำ");
+      return;
+    }
+    const serviceAccount = JSON.parse(raw);
+    admin = require("firebase-admin");
+    if (!admin.apps.length) {
+      admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+    }
+    db = admin.firestore();
+    console.log("Firebase Admin พร้อมแล้ว");
+  } catch (error) {
+    console.error("Firebase Admin init failed:", error.message);
+    admin = null;
+    db = null;
+  }
+}
+
+initFirebaseAdmin();
+
+function getFirebaseWebConfig() {
+  return {
+    apiKey: process.env.FIREBASE_API_KEY || "",
+    authDomain: process.env.FIREBASE_AUTH_DOMAIN || "",
+    projectId: process.env.FIREBASE_PROJECT_ID || "",
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "",
+    messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || "",
+    appId: process.env.FIREBASE_APP_ID || "",
+  };
+}
 
 function send(ws, type, payload = {}) {
   if (ws.readyState === 1) {
@@ -41,6 +82,7 @@ function publicPlayers(room) {
   return [...room.players.values()].map((player) => ({
     id: player.id,
     name: player.name,
+    uid: player.uid || null,
     isHost: player.id === room.hostId,
     submitted: Boolean(player.pending),
   }));
@@ -49,12 +91,37 @@ function publicPlayers(room) {
 function lobbyPayload(room) {
   return {
     code: room.code,
+    roomName: room.roomName,
+    hasPassword: Boolean(room.passwordHash),
     allowRepeat: room.allowRepeat,
     roundLimit: room.roundLimit,
     status: room.status,
     players: publicPlayers(room),
     hostId: room.hostId,
+    playerCount: room.players.size,
   };
+}
+
+function publicRoomList() {
+  return [...rooms.values()]
+    .filter((room) => room.status === "lobby")
+    .map((room) => ({
+      code: room.code,
+      roomName: room.roomName,
+      hasPassword: Boolean(room.passwordHash),
+      playerCount: room.players.size,
+      maxPlayers: MAX_PLAYERS,
+      allowRepeat: room.allowRepeat,
+      roundLimit: room.roundLimit,
+      hostName: room.players.get(room.hostId)?.name || "",
+    }));
+}
+
+function broadcastRoomList() {
+  const list = publicRoomList();
+  for (const ws of lobbyWatchers) {
+    send(ws, "roomList", { rooms: list });
+  }
 }
 
 function generateCode() {
@@ -113,6 +180,27 @@ function evaluateGuess(guess, secret) {
   };
 }
 
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.scryptSync(password, salt, 32).toString("hex");
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, stored) {
+  if (!stored) return true;
+  try {
+    const [salt, hash] = String(stored).split(":");
+    if (!salt || !hash) return false;
+    const next = crypto.scryptSync(String(password || ""), salt, 32).toString("hex");
+    const a = Buffer.from(hash, "hex");
+    const b = Buffer.from(next, "hex");
+    if (a.length !== b.length) return false;
+    return crypto.timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
 function clearRoomTimer(room) {
   if (room.timer) {
     clearInterval(room.timer);
@@ -126,13 +214,125 @@ function deleteRoomIfEmpty(code) {
   if (room.players.size === 0) {
     clearRoomTimer(room);
     rooms.delete(code);
+    broadcastRoomList();
   }
 }
 
-function endGame(room, reason, winners = []) {
+function modeWinField(mode) {
+  if (mode === "multi") return "multiWins";
+  if (mode === "online") return "onlineWins";
+  return "soloWins";
+}
+
+function bumpMemoryStats(uid, displayName, photoURL, mode) {
+  const field = modeWinField(mode);
+  const current = memoryStats.get(uid) || {
+    uid,
+    displayName: displayName || "ผู้เล่น",
+    photoURL: photoURL || "",
+    soloWins: 0,
+    multiWins: 0,
+    onlineWins: 0,
+  };
+  current.displayName = displayName || current.displayName;
+  current.photoURL = photoURL || current.photoURL;
+  current[field] = Number(current[field] || 0) + 1;
+  memoryStats.set(uid, current);
+  return current;
+}
+
+async function recordWin({ uid, displayName, photoURL, mode }) {
+  if (!uid) return;
+  bumpMemoryStats(uid, displayName, photoURL, mode);
+  if (!db) return;
+  const field = modeWinField(mode);
+  const ref = db.collection("stats").doc(uid);
+  await ref.set(
+    {
+      displayName: displayName || "ผู้เล่น",
+      photoURL: photoURL || "",
+      [field]: admin.firestore.FieldValue.increment(1),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+async function getLeaderboard(mode) {
+  const field = modeWinField(mode);
+  if (db) {
+    try {
+      const snap = await db.collection("stats").orderBy(field, "desc").limit(20).get();
+      return snap.docs.map((doc, index) => {
+        const data = doc.data() || {};
+        return {
+          uid: doc.id,
+          rank: index + 1,
+          name: data.displayName || "ผู้เล่น",
+          photoURL: data.photoURL || "",
+          wins: Number(data[field] || 0),
+        };
+      });
+    } catch (error) {
+      console.error("leaderboard firestore error:", error.message);
+    }
+  }
+  return [...memoryStats.values()]
+    .map((row) => ({
+      uid: row.uid,
+      name: row.displayName,
+      photoURL: row.photoURL,
+      wins: Number(row[field] || 0),
+    }))
+    .filter((row) => row.wins > 0)
+    .sort((a, b) => b.wins - a.wins)
+    .slice(0, 20)
+    .map((row, index) => ({ ...row, rank: index + 1 }));
+}
+
+async function verifyAuthToken(idToken) {
+  if (!idToken) return null;
+  if (String(idToken).startsWith("demo:")) {
+    if (!ALLOW_DEMO_AUTH) return null;
+    const parts = String(idToken).split(":");
+    return {
+      uid: parts[2] || `demo_${Date.now()}`,
+      name: parts[1] || "ผู้เล่นทดลอง",
+      picture: "",
+      demo: true,
+    };
+  }
+  if (!admin) return null;
+  const decoded = await admin.auth().verifyIdToken(idToken);
+  return {
+    uid: decoded.uid,
+    name: decoded.name || decoded.email || "ผู้เล่น",
+    picture: decoded.picture || "",
+    demo: false,
+  };
+}
+
+async function endGame(room, reason, winners = []) {
   if (room.status === "ended") return;
   room.status = "ended";
   clearRoomTimer(room);
+
+  if (reason === "win" && winners.length) {
+    for (const winner of winners) {
+      const player = [...room.players.values()].find((item) => item.id === winner.id);
+      if (!player?.uid) continue;
+      try {
+        await recordWin({
+          uid: player.uid,
+          displayName: player.name,
+          photoURL: player.photoURL || "",
+          mode: "online",
+        });
+      } catch (error) {
+        console.error("record online win failed:", error.message);
+      }
+    }
+  }
 
   const papers = [...room.players.values()].map((player) => ({
     id: player.id,
@@ -148,6 +348,7 @@ function endGame(room, reason, winners = []) {
     allowRepeat: room.allowRepeat,
     roundLimit: room.roundLimit,
   });
+  broadcastRoomList();
 }
 
 function maybeTimeout(room) {
@@ -172,7 +373,7 @@ function finishRound(room) {
       name: player.name,
       row,
     });
-    if (result.win) winners.push({ id: player.id, name: player.name });
+    if (result.win) winners.push({ id: player.id, name: player.name, uid: player.uid || null });
   }
 
   room.currentRound += 1;
@@ -204,8 +405,16 @@ function finishRound(room) {
   });
 }
 
-function createRoom(ws, msg) {
-  const name = String(msg.name || "").trim().slice(0, 20);
+async function createRoom(ws, msg) {
+  const auth = await verifyAuthToken(msg.idToken);
+  if (!auth) {
+    send(ws, "error", { message: "ต้องล็อกอินก่อนสร้างห้อง" });
+    return;
+  }
+
+  const name = String(msg.name || auth.name || "").trim().slice(0, 20);
+  const roomName = String(msg.roomName || `${name} ห้อง`).trim().slice(0, 24) || "ห้องใหม่";
+  const password = String(msg.password || "");
   const allowRepeat = Boolean(msg.allowRepeat);
   const roundLimit = Number(msg.roundLimit);
 
@@ -223,7 +432,9 @@ function createRoom(ws, msg) {
   const code = generateCode();
   const player = {
     id: cryptoRandomId(),
+    uid: auth.uid,
     name,
+    photoURL: auth.picture || "",
     ws,
     rows: [],
     pending: null,
@@ -231,6 +442,8 @@ function createRoom(ws, msg) {
 
   const room = {
     code,
+    roomName,
+    passwordHash: password ? hashPassword(password) : null,
     hostId: player.id,
     allowRepeat,
     roundLimit,
@@ -245,20 +458,29 @@ function createRoom(ws, msg) {
   ws.roomCode = code;
   ws.playerId = player.id;
   rooms.set(code, room);
+  lobbyWatchers.delete(ws);
 
   send(ws, "joined", {
-    you: { id: player.id, name: player.name, isHost: true },
+    you: { id: player.id, name: player.name, isHost: true, uid: player.uid },
     ...lobbyPayload(room),
     secondsPerLine: SECONDS_PER_LINE,
   });
   broadcast(room, "lobby", lobbyPayload(room));
+  broadcastRoomList();
 }
 
-function joinRoom(ws, msg) {
-  const name = String(msg.name || "").trim().slice(0, 20);
+async function joinRoom(ws, msg) {
+  const auth = await verifyAuthToken(msg.idToken);
+  if (!auth) {
+    send(ws, "error", { message: "ต้องล็อกอินก่อนเข้าห้อง" });
+    return;
+  }
+
+  const name = String(msg.name || auth.name || "").trim().slice(0, 20);
   const code = String(msg.code || "")
     .trim()
     .toUpperCase();
+  const password = String(msg.password || "");
 
   if (!name) {
     send(ws, "error", { message: "กรุณาใส่ชื่อ" });
@@ -282,6 +504,10 @@ function joinRoom(ws, msg) {
     send(ws, "error", { message: `ห้องเต็มแล้ว (สูงสุด ${MAX_PLAYERS} คน)` });
     return;
   }
+  if (room.passwordHash && !verifyPassword(password, room.passwordHash)) {
+    send(ws, "error", { message: "รหัสผ่านห้องไม่ถูกต้อง" });
+    return;
+  }
   if ([...room.players.values()].some((player) => player.name === name)) {
     send(ws, "error", { message: "ชื่อนี้มีในห้องแล้ว" });
     return;
@@ -291,7 +517,9 @@ function joinRoom(ws, msg) {
 
   const player = {
     id: cryptoRandomId(),
+    uid: auth.uid,
     name,
+    photoURL: auth.picture || "",
     ws,
     rows: [],
     pending: null,
@@ -299,13 +527,15 @@ function joinRoom(ws, msg) {
   room.players.set(player.id, player);
   ws.roomCode = code;
   ws.playerId = player.id;
+  lobbyWatchers.delete(ws);
 
   send(ws, "joined", {
-    you: { id: player.id, name: player.name, isHost: false },
+    you: { id: player.id, name: player.name, isHost: false, uid: player.uid },
     ...lobbyPayload(room),
     secondsPerLine: SECONDS_PER_LINE,
   });
   broadcast(room, "lobby", lobbyPayload(room));
+  broadcastRoomList();
 }
 
 function startGame(ws) {
@@ -348,6 +578,7 @@ function startGame(ws) {
     secondsPerLine: SECONDS_PER_LINE,
     players: publicPlayers(room),
   });
+  broadcastRoomList();
 }
 
 function submitGuess(ws, msg) {
@@ -396,6 +627,7 @@ function submitGuess(ws, msg) {
 }
 
 function leaveCurrent(ws) {
+  lobbyWatchers.delete(ws);
   const code = ws.roomCode;
   if (!code) return;
   const room = rooms.get(code);
@@ -435,6 +667,7 @@ function leaveCurrent(ws) {
     }
   } else if (room.status === "lobby") {
     broadcast(room, "lobby", lobbyPayload(room));
+    broadcastRoomList();
   }
 }
 
@@ -453,12 +686,82 @@ function getLanAddresses() {
   return addresses;
 }
 
-const server = http.createServer((req, res) => {
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = "";
+    req.on("data", (chunk) => {
+      data += chunk;
+      if (data.length > 1e6) {
+        reject(new Error("body too large"));
+        req.destroy();
+      }
+    });
+    req.on("end", () => {
+      try {
+        resolve(data ? JSON.parse(data) : {});
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
+
+function sendJson(res, status, payload) {
+  res.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  });
+  res.end(JSON.stringify(payload));
+}
+
+const server = http.createServer(async (req, res) => {
   const urlPath = decodeURIComponent((req.url || "/").split("?")[0]);
+  const method = req.method || "GET";
+
+  if (method === "OPTIONS") {
+    sendJson(res, 204, {});
+    return;
+  }
 
   if (urlPath === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-    res.end(JSON.stringify({ ok: true, rooms: rooms.size }));
+    sendJson(res, 200, { ok: true, rooms: rooms.size, firebaseAdmin: Boolean(db) });
+    return;
+  }
+
+  if (urlPath === "/api/firebase-config") {
+    sendJson(res, 200, getFirebaseWebConfig());
+    return;
+  }
+
+  if (urlPath === "/api/leaderboard" && method === "GET") {
+    const mode = new URL(req.url, "http://localhost").searchParams.get("mode") || "solo";
+    const rows = await getLeaderboard(mode);
+    sendJson(res, 200, { mode, rows });
+    return;
+  }
+
+  if (urlPath === "/api/record-win" && method === "POST") {
+    try {
+      const body = await readBody(req);
+      const auth = await verifyAuthToken(body.idToken);
+      if (!auth) {
+        sendJson(res, 401, { error: "unauthorized" });
+        return;
+      }
+      const mode = body.mode === "multi" || body.mode === "online" ? body.mode : "solo";
+      await recordWin({
+        uid: auth.uid,
+        displayName: body.displayName || auth.name,
+        photoURL: body.photoURL || auth.picture || "",
+        mode,
+      });
+      sendJson(res, 200, { ok: true });
+    } catch (error) {
+      console.error(error);
+      sendJson(res, 500, { error: "failed" });
+    }
     return;
   }
 
@@ -492,9 +795,10 @@ wss.on("connection", (ws) => {
     lanAddresses: getLanAddresses(),
     port: PORT,
     secondsPerLine: SECONDS_PER_LINE,
+    rooms: publicRoomList(),
   });
 
-  ws.on("message", (raw) => {
+  ws.on("message", async (raw) => {
     let msg;
     try {
       msg = JSON.parse(String(raw));
@@ -505,11 +809,15 @@ wss.on("connection", (ws) => {
 
     try {
       switch (msg.type) {
+        case "watchRooms":
+          lobbyWatchers.add(ws);
+          send(ws, "roomList", { rooms: publicRoomList() });
+          break;
         case "create":
-          createRoom(ws, msg);
+          await createRoom(ws, msg);
           break;
         case "join":
-          joinRoom(ws, msg);
+          await joinRoom(ws, msg);
           break;
         case "start":
           startGame(ws);
@@ -520,6 +828,7 @@ wss.on("connection", (ws) => {
         case "leave":
           leaveCurrent(ws);
           send(ws, "left", {});
+          broadcastRoomList();
           break;
         default:
           send(ws, "error", { message: "คำสั่งไม่รู้จัก" });
@@ -532,6 +841,7 @@ wss.on("connection", (ws) => {
 
   ws.on("close", () => {
     leaveCurrent(ws);
+    broadcastRoomList();
   });
 });
 

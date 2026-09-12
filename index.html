@@ -17,6 +17,28 @@
     <span class="dot-grid"></span>
   </div>
   <div class="desk">
+    <section id="screen-login" class="screen">
+      <article class="sheet sheet-setup login-sheet">
+        <header class="setup-head">
+          <p class="brand-kicker">Tualek</p>
+          <h1>เกมท้ายตัวเลข</h1>
+          <p class="byline">พัฒนาโดย เฮียหนุ่มตองเอ็น</p>
+          <p class="tagline">เข้าสู่ระบบเพื่อเล่นและเก็บสถิติการชนะ</p>
+        </header>
+        <p id="login-status" class="hint-block">กำลังเตรียมระบบสมาชิก…</p>
+        <p id="login-error" class="error" hidden></p>
+        <div id="login-actions" class="login-actions" hidden>
+          <button type="button" id="login-google-btn" class="btn btn-start">เข้าสู่ระบบด้วย Google</button>
+          <button type="button" id="login-facebook-btn" class="btn btn-ink">เข้าสู่ระบบด้วย Facebook</button>
+        </div>
+        <div id="demo-login" class="demo-login" hidden>
+          <p class="hint-block">ยังไม่ได้ตั้งค่า Firebase — ใช้โหมดทดลองชั่วคราวได้</p>
+          <input id="demo-name-input" class="full-input" type="text" maxlength="20" placeholder="ชื่อที่จะแสดง" value="ผู้เล่นทดลอง" />
+          <button type="button" id="login-demo-btn" class="btn btn-start">เข้าเล่นแบบทดลอง</button>
+        </div>
+      </article>
+    </section>
+
     <section id="screen-setup" class="screen" hidden>
       <article class="sheet sheet-setup">
         <header class="setup-head">
@@ -26,6 +48,15 @@
           <p class="tagline">ทายเลข 4 หลักให้ถูกก่อนเพื่อน<br />สนุกได้ทั้งเล่นคนเดียวและแข่งทีม</p>
         </header>
 
+        <div class="user-bar">
+          <img id="user-avatar" class="user-avatar" alt="" hidden />
+          <div class="user-meta">
+            <p id="user-name" class="user-name">ผู้เล่น</p>
+            <p class="user-note">ล็อกอินแล้ว</p>
+          </div>
+          <button type="button" id="logout-btn" class="btn btn-ink user-logout">ออก</button>
+        </div>
+
         <div class="field">
           <p class="label">โหมดการเล่น</p>
           <div class="choice-row choice-row-3" role="radiogroup" aria-label="โหมดการเล่น">
@@ -33,6 +64,13 @@
             <button type="button" class="choice" data-mode="multi" aria-pressed="false">ส่งเครื่อง</button>
             <button type="button" class="choice" data-mode="online" aria-pressed="false">คนละเครื่อง</button>
           </div>
+        </div>
+
+        <div class="field leaderboard-field">
+          <p class="label" id="leaderboard-label">อันดับชนะ · คนเดียว</p>
+          <ol id="leaderboard-list" class="leaderboard-list">
+            <li class="empty-players">ยังไม่มีสถิติ</li>
+          </ol>
         </div>
 
         <div class="field" id="players-field" hidden>
@@ -45,21 +83,24 @@
         </div>
 
         <div class="field" id="online-field" hidden>
-          <p class="label">ชื่อของคุณ</p>
-          <input id="online-name-input" class="full-input" type="text" maxlength="20" placeholder="พิมพ์ชื่อ" autocomplete="off" />
+          <p class="label">ล็อบบี้ห้องออนไลน์</p>
+          <ul id="room-list" class="room-list">
+            <li class="empty-players">ยังไม่มีห้อง · สร้างห้องใหม่ได้ด้านล่าง</li>
+          </ul>
+          <button type="button" id="refresh-rooms-btn" class="btn btn-ink">รีเฟรชรายชื่อห้อง</button>
 
-          <p class="label online-sub">สร้างห้องหรือเข้าร่วม</p>
-          <div class="choice-row" role="radiogroup" aria-label="สร้างหรือเข้าร่วม">
-            <button type="button" class="choice" data-online-action="create" aria-pressed="true">สร้างห้อง</button>
-            <button type="button" class="choice" data-online-action="join" aria-pressed="false">เข้าร่วม</button>
-          </div>
+          <p class="label online-sub">สร้างห้องใหม่</p>
+          <input id="room-title-input" class="full-input" type="text" maxlength="24" placeholder="ชื่อห้อง เช่น ห้องเพื่อนซี้" autocomplete="off" />
+          <input id="room-password-input" class="full-input online-gap" type="password" maxlength="20" placeholder="รหัสเข้าห้อง (ว่างได้ = ห้องเปิด)" autocomplete="new-password" />
 
-          <div id="join-code-row" class="rounds-row" hidden>
+          <p class="label online-sub">หรือเข้าร่วมด้วยรหัส</p>
+          <div class="rounds-row">
             <label for="room-code-input">รหัสห้อง</label>
             <input id="room-code-input" type="text" maxlength="4" placeholder="ABCD" autocomplete="off" class="room-code-input" />
           </div>
+          <input id="join-password-input" class="full-input online-gap" type="password" maxlength="20" placeholder="รหัสผ่านห้อง (ถ้ามีล็อก)" autocomplete="current-password" />
 
-          <p id="online-hint" class="hint-block">เพื่อนเปิดลิงก์เซิร์ฟเวอร์เดียวกัน แล้วใส่รหัสห้อง · เวลารวม = จำนวนบรรทัด × 2 นาที</p>
+          <p id="online-hint" class="hint-block">เวลารวม = จำนวนบรรทัด × 2 นาที · ทุกคนทายพร้อมกัน รอส่งครบค่อยขึ้นบรรทัดถัดไป</p>
         </div>
 
         <div class="field" id="repeat-field">
@@ -92,7 +133,7 @@
     <section id="screen-lobby" class="screen" hidden>
       <article class="sheet sheet-setup">
         <header class="setup-head">
-          <h1>ห้องรอเพื่อน</h1>
+          <h1 id="lobby-title">ห้องรอเพื่อน</h1>
           <p class="byline">รหัสห้อง</p>
           <p id="lobby-code" class="lobby-code"></p>
         </header>
@@ -194,6 +235,12 @@
       </article>
     </section>
   </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="auth.js"></script>
   <script src="game.js"></script>
 </body>
 </html>

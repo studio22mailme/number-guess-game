@@ -1,61 +1,86 @@
-# เกมท้ายตัวเลข
+# เกมท้ายตัวเลข (Tualek)
 
-ทายตัวเลข 4 หลัก แบบกระดาษ มี 3 โหมด:
+ทายตัวเลข 4 หลัก มีโหมด คนเดียว / ส่งเครื่อง / คนละเครื่อง  
+เว็บบังคับล็อกอิน เก็บสถิติชนะแยกโหมด และมีล็อบบี้ห้องออนไลน์
 
-- **คนเดียว** — เล่นคนเดียวบนเครื่องนี้
-- **ส่งเครื่อง** — แข่งกับเพื่อนเครื่องเดียวกัน สลับคนหลังส่งคำตอบ
-- **คนละเครื่อง** — แข่งพร้อมกันผ่าน Wi‑Fi หรืออินเทอร์เน็ต (ต้องเปิดเซิร์ฟเวอร์)
-
-## ติดตั้งและรันบนเครื่องตัวเอง
-
-ต้องมี Node.js 18+
+## รันบนเครื่อง
 
 ```bash
 npm install
 npm start
 ```
 
-แล้วเปิดเบราว์เซอร์ที่ `http://localhost:3000`
+เปิด `http://localhost:3000`
 
-## อัปขึ้นเว็บฟรีให้เป็นเซิร์ฟเวอร์ (Render)
+ถ้ายังไม่ตั้งค่า Firebase จะมีปุ่ม **เข้าเล่นแบบทดลอง**
 
-โหมดคนละเครื่องต้องมีเซิร์ฟเวอร์ Node ค้างไว้ — **ฝากไฟล์อย่าง GitHub Pages / Netlify แบบสถิตใช้ไม่ได้**
+## ตั้งค่า Firebase (จำเป็นสำหรับ Google / Facebook จริง)
 
-โค้ดอยู่ที่: https://github.com/studio22mailme/number-guess-game
+### 1) สร้างโปรเจกต์
+1. ไปที่ [Firebase Console](https://console.firebase.google.com/)
+2. สร้างโปรเจกต์ใหม่
+3. เพิ่มแอป **Web** แล้วคัดลอกค่า config
 
-### Deploy ครั้งเดียวบน Render
+### 2) เปิด Authentication
+1. Authentication → Sign-in method
+2. เปิด **Google**
+3. เปิด **Facebook** (ต้องมี Facebook App ID / App Secret จาก [Meta Developers](https://developers.facebook.com/))
+4. ใส่ Authorized domain: `tualek.onrender.com` และ `localhost`
 
-1. เปิดลิงก์นี้: [Deploy to Render](https://render.com/deploy?repo=https://github.com/studio22mailme/number-guess-game)
-2. ล็อกอิน Render ด้วย GitHub (บัญชีเดียวกับที่ push โค้ดได้)
-3. กด **Apply** / **Create** แผน **Free**
-4. รอ Deploy จนสถานะเป็น **Live**
-5. ได้ลิงก์ประมาณ `https://number-guess-game-xxxx.onrender.com` — ส่งให้เพื่อนเปิดได้เลย
+### 3) สร้าง Firestore
+1. Firestore Database → สร้างแบบ production หรือ test
+2. แนะนำกฎเริ่มต้นให้อ่านสถิติได้ เขียนผ่านเซิร์ฟเวอร์เท่านั้น:
 
-จากนั้นใช้โหมด **คนละเครื่อง**: คนหนึ่งสร้างห้อง อีกคนเข้าร่วมด้วยรหัส
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+    match /stats/{uid} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}
+```
 
-### ข้อจำกัดแผนฟรีของ Render
+### 4) Service Account สำหรับเซิร์ฟเวอร์
+1. Project settings → Service accounts → Generate new private key
+2. คัดลอก JSON ทั้งก้อน ไปใส่เป็น env บน Render ชื่อ `FIREBASE_SERVICE_ACCOUNT`
 
-- ถ้าไม่มีคนเข้าสักพัก เซิร์ฟเวอร์อาจ **หลับ** — ครั้งแรกที่เปิดใหม่จะช้าประมาณ 30–60 วินาที
-- ห้องเกมเก็บในหน่วยความจำ ถ้าเซิร์ฟเวอร์รีสตาร์ท ห้องเก่าจะหาย
+### 5) Env บน Render
+ตั้งค่า Environment Variables:
 
-ทางเลือกอื่นที่รัน Node ได้เช่นกัน: [Railway](https://railway.app), [Fly.io](https://fly.io)
+- `FIREBASE_API_KEY`
+- `FIREBASE_AUTH_DOMAIN`
+- `FIREBASE_PROJECT_ID`
+- `FIREBASE_STORAGE_BUCKET`
+- `FIREBASE_MESSAGING_SENDER_ID`
+- `FIREBASE_APP_ID`
+- `FIREBASE_SERVICE_ACCOUNT` = JSON ทั้งก้อนของ service account
+- `ALLOW_DEMO_AUTH=0` (ปิดโหมดทดลองเมื่อขึ้น production)
 
-## โหมดคนละเครื่อง — Wi‑Fi บ้านเดียวกัน
+จากนั้น Redeploy
 
-1. เปิด `npm start` บนคอมพิวเตอร์โฮสต์
-2. ในเทอร์มินัลจะแสดงที่อยู่ LAN เช่น `http://192.168.1.10:3000`
-3. โฮสต์และเพื่อนเปิดลิงก์นั้นบนมือถือ/คอมที่อยู่ใน Wi‑Fi เดียวกัน
-4. คนหนึ่งกด **คนละเครื่อง → สร้างห้อง** (เลือกซ้ำเลขได้ไหม และจำนวนบรรทัด)
-5. คนอื่นกด **เข้าร่วม** ใส่รหัสห้อง 4 ตัว
-6. เจ้าของห้องกด **เริ่มเกม**
+## ฟีเจอร์สมาชิก / ล็อบบี้
 
-เวลารวมทั้งเกม = จำนวนบรรทัด × 2 นาที (เช่น 10 บรรทัด = 20 นาที)  
-แต่ละบรรทัดทุกคนทายพร้อมกัน ต้องรอให้ทุกคนส่งครบก่อนขึ้นบรรทัดถัดไป  
-หมดเวลาหรือครบบรรทัดจะเฉลยรหัส
+- เข้าเว็บต้องล็อกอินก่อน
+- ลีดเดอร์บอร์ดหน้าแรกเปลี่ยนตามปุ่มโหมด (คนเดียว / ส่งเครื่อง / คนละเครื่อง)
+- คนละเครื่อง: เห็นรายชื่อห้อง, ชื่อห้อง, รหัส, ห้องที่มีรหัสผ่าน
+- สร้างห้องตั้งชื่อ + รหัสผ่านได้ (ว่าง = ห้องเปิด)
+- ชนะแล้วระบบบันทึกสถิติ
+
+## Wi‑Fi บ้าน / อินเทอร์เน็ต
+
+- บ้าน: `npm start` แล้วให้เพื่อนเข้า IP ที่เทอร์มินัลโชว์
+- อินเทอร์เน็ต: Deploy บน Render ตาม `render.yaml`
 
 ## ไฟล์สำคัญ
 
 - `index.html` / `styles.css` / `game.js` — หน้าเกม
-- `server.js` — เสิร์ฟไฟล์ + WebSocket ห้องออนไลน์
-- `package.json` — สคริปต์ `npm start`
-- `render.yaml` — ค่าตั้งต้นสำหรับ Deploy บน Render
+- `auth.js` / `firebase-config.js` — สมาชิก
+- `server.js` — WebSocket + API สถิติ/ห้อง
+- `package.json` — `npm start`
