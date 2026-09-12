@@ -1,8 +1,50 @@
 (() => {
-  const DIGIT_COUNT = 4;
   const MAX_PLAYERS = 8;
   const MAX_ROUNDS = 30;
-  const SECONDS_PER_LINE = 120;
+  const DEFAULT_SECONDS_PER_LINE = 120;
+
+  const DIFFICULTY = {
+    easy: {
+      id: "easy",
+      label: "ง่าย",
+      digitCount: 4,
+      secondsPerLine: 120,
+      columnFeedback: true,
+      timeoutEnds: false,
+      hint: "ง่าย · เลข 4 หลัก · สัญลักษณ์ตรงคอลัมน์ตัวเลข",
+    },
+    normal: {
+      id: "normal",
+      label: "ปกติ",
+      digitCount: 4,
+      secondsPerLine: 120,
+      columnFeedback: false,
+      timeoutEnds: false,
+      hint: "ปกติ · เลข 4 หลัก · สัญลักษณ์รวมด้านขวา",
+    },
+    hard: {
+      id: "hard",
+      label: "ยาก",
+      digitCount: 5,
+      secondsPerLine: 120,
+      columnFeedback: false,
+      timeoutEnds: false,
+      hint: "ยาก · เลข 5 หลัก · สัญลักษณ์รวมด้านขวา",
+    },
+    extreme: {
+      id: "extreme",
+      label: "ยากมาก",
+      digitCount: 5,
+      secondsPerLine: 30,
+      columnFeedback: false,
+      timeoutEnds: true,
+      hint: "ยากมาก · เลข 5 หลัก · ตอบใน 30 วินาที/รอบ ไม่งั้นจบ",
+    },
+  };
+
+  function difficultyConfig(id) {
+    return DIFFICULTY[id] || DIFFICULTY.normal;
+  }
 
   const screens = {
     login: document.getElementById("screen-login"),
@@ -28,6 +70,7 @@
     onlineField: document.getElementById("online-field"),
     roomList: document.getElementById("room-list"),
     onlineNameInput: document.getElementById("online-name-input"),
+    onlineHint: document.getElementById("online-hint"),
     roomTitleInput: document.getElementById("room-title-input"),
     roomPasswordInput: document.getElementById("room-password-input"),
     joinPasswordInput: document.getElementById("join-password-input"),
@@ -73,10 +116,13 @@
     resultTitle: document.getElementById("result-title"),
     resultSecret: document.getElementById("result-secret"),
     resultDetail: document.getElementById("result-detail"),
+    difficultyHint: document.getElementById("difficulty-hint"),
+    setupTagline: document.getElementById("setup-tagline"),
   };
 
   const setup = {
     mode: "solo",
+    difficulty: "normal",
     allowRepeat: false,
     limitRounds: false,
     names: [],
@@ -98,9 +144,10 @@
     round: 1,
     waiting: false,
     papers: null,
-    secondsPerLine: SECONDS_PER_LINE,
+    secondsPerLine: DEFAULT_SECONDS_PER_LINE,
     lanAddresses: [],
     port: null,
+    difficulty: "normal",
   };
 
   function showScreen(name) {
@@ -141,54 +188,76 @@
     return window.TualekAuth?.state?.user || null;
   }
 
-  function generateSecret(allowRepeat) {
+  function digitCount() {
+    return game?.digitCount || difficultyConfig(setup.difficulty).digitCount;
+  }
+
+  function generateSecret(allowRepeat, count = digitCount()) {
     if (allowRepeat) {
-      return Array.from({ length: DIGIT_COUNT }, () => Math.floor(Math.random() * 10));
+      return Array.from({ length: count }, () => Math.floor(Math.random() * 10));
     }
     const pool = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
     for (let i = pool.length - 1; i > 0; i -= 1) {
       const j = Math.floor(Math.random() * (i + 1));
       [pool[i], pool[j]] = [pool[j], pool[i]];
     }
-    return pool.slice(0, DIGIT_COUNT);
+    return pool.slice(0, count);
   }
 
   function evaluateGuess(guess, secret) {
-    const exact = Array(DIGIT_COUNT).fill(false);
-    const secretUsed = Array(DIGIT_COUNT).fill(false);
+    const count = secret.length;
+    const exact = Array(count).fill(false);
+    const secretUsed = Array(count).fill(false);
+    const marks = Array(count).fill("none");
     let blacks = 0;
     let whites = 0;
 
-    for (let i = 0; i < DIGIT_COUNT; i += 1) {
+    for (let i = 0; i < count; i += 1) {
       if (guess[i] === secret[i]) {
         exact[i] = true;
         secretUsed[i] = true;
+        marks[i] = "black";
         blacks += 1;
       }
     }
 
-    for (let i = 0; i < DIGIT_COUNT; i += 1) {
+    for (let i = 0; i < count; i += 1) {
       if (exact[i]) continue;
-      for (let j = 0; j < DIGIT_COUNT; j += 1) {
+      for (let j = 0; j < count; j += 1) {
         if (!secretUsed[j] && guess[i] === secret[j]) {
           secretUsed[j] = true;
+          marks[i] = "white";
           whites += 1;
           break;
         }
       }
     }
 
+    const win = blacks === count;
+    if (win) {
+      for (let i = 0; i < count; i += 1) marks[i] = "star";
+    }
+
     return {
       blacks,
       whites,
-      win: blacks === DIGIT_COUNT,
+      win,
       none: blacks === 0 && whites === 0,
+      marks,
     };
   }
 
+  function markIcon(kind) {
+    if (kind === "star") return '<span class="mark-star">★</span>';
+    if (kind === "black") return '<span class="peg black"></span>';
+    if (kind === "white") return '<span class="peg white"></span>';
+    return '<span class="peg none"></span>';
+  }
+
   function feedbackMarkup(row) {
+    const count = row.guess?.length || digitCount();
     if (row.win) {
-      return `<span class="feedback-pegs">${'<span class="mark-star">★</span>'.repeat(DIGIT_COUNT)}</span>`;
+      return `<span class="feedback-pegs">${'<span class="mark-star">★</span>'.repeat(count)}</span>`;
     }
     if (row.none) return `<span class="feedback-pegs"><span class="peg none"></span></span>`;
     const parts = [];
@@ -220,13 +289,31 @@
   }
 
   function emptyDraft() {
-    return Array(DIGIT_COUNT).fill(null);
+    return Array(digitCount()).fill(null);
   }
 
   function formatDuration(totalSeconds) {
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
     return `${mins}:${String(secs).padStart(2, "0")}`;
+  }
+
+  function difficultyLabel(id) {
+    return difficultyConfig(id).label;
+  }
+
+  function updateDifficultyUi() {
+    const cfg = difficultyConfig(setup.difficulty);
+    if (els.difficultyHint) els.difficultyHint.textContent = cfg.hint;
+    if (els.setupTagline) {
+      els.setupTagline.innerHTML = `ทายเลข ${cfg.digitCount} หลักให้ถูกก่อนเพื่อน<br />สนุกได้ทั้งเล่นคนเดียวและแข่งทีม`;
+    }
+    if (els.onlineHint) {
+      els.onlineHint.textContent = cfg.timeoutEnds
+        ? `ยากมาก · แต่ละบรรทัด ${cfg.secondsPerLine} วินาที · ไม่ส่งทัน = จบเกม`
+        : `แต่ละบรรทัดมี ${cfg.secondsPerLine === 120 ? "2 นาที" : `${cfg.secondsPerLine} วินาที`} · ส่งได้เลยไม่รอเพื่อน · ไม่ส่งทัน Bot เล่นแทน`;
+    }
+    updateTimePreview();
   }
 
   function modeLabel(mode) {
@@ -240,10 +327,13 @@
       els.timePreview.hidden = true;
       return;
     }
-    const rounds = Number(els.roundsInput.value) || 0;
-    const mins = Math.floor((rounds * SECONDS_PER_LINE) / 60);
+    const cfg = difficultyConfig(setup.difficulty);
     els.timePreview.hidden = false;
-    els.timePreview.textContent = `แต่ละบรรทัดมีเวลา 2 นาที · ส่งได้เลยไม่ต้องรอเพื่อน · ไม่ส่งทัน Bot เล่นแทน`;
+    if (cfg.timeoutEnds) {
+      els.timePreview.textContent = `ยากมาก · ตอบภายใน ${cfg.secondsPerLine} วินาทีต่อบรรทัด · ไม่ทัน = จบเกม`;
+    } else {
+      els.timePreview.textContent = `แต่ละบรรทัดมีเวลา ${cfg.secondsPerLine === 120 ? "2 นาที" : `${cfg.secondsPerLine} วินาที`} · ส่งได้เลยไม่ต้องรอเพื่อน`;
+    }
   }
 
   function updateSetupVisibility() {
@@ -306,7 +396,7 @@
         <li class="room-item">
           <div class="room-main">
             <strong>${escapeHtml(room.roomName || "ห้อง")}</strong>
-            <span class="room-meta">รหัส ${escapeHtml(room.code)} · ${room.playerCount}/${room.maxPlayers || MAX_PLAYERS} คน${room.hasPassword ? " · มีรหัสผ่าน" : ""}</span>
+            <span class="room-meta">รหัส ${escapeHtml(room.code)} · ${difficultyLabel(room.difficulty)} · ${room.digitCount || 4} หลัก · ${room.playerCount}/${room.maxPlayers || MAX_PLAYERS} คน${room.hasPassword ? " · มีรหัสผ่าน" : ""}</span>
           </div>
           <button type="button" class="btn btn-ink room-join-btn" data-join-code="${escapeHtml(room.code)}" data-locked="${room.hasPassword ? "1" : "0"}">เข้า</button>
         </li>`
@@ -410,6 +500,7 @@
           password: joinPassword,
           roundLimit: rounds,
           allowRepeat: setup.allowRepeat,
+          difficulty: setup.difficulty,
         };
       }
 
@@ -421,6 +512,7 @@
         password,
         allowRepeat: setup.allowRepeat,
         roundLimit: rounds,
+        difficulty: setup.difficulty,
       };
     }
 
@@ -445,6 +537,7 @@
 
     return {
       mode: setup.mode,
+      difficulty: setup.difficulty,
       allowRepeat: setup.allowRepeat,
       roundLimit,
       names,
@@ -452,14 +545,20 @@
   }
 
   function createGame(settings, secret) {
+    const cfg = difficultyConfig(settings.difficulty || "normal");
     return {
       mode: settings.mode,
+      difficulty: cfg.id,
+      digitCount: cfg.digitCount,
+      columnFeedback: cfg.columnFeedback,
+      timeoutEnds: cfg.timeoutEnds,
+      secondsPerLine: cfg.secondsPerLine,
       allowRepeat: settings.allowRepeat,
       roundLimit: settings.roundLimit,
-      secret: secret || generateSecret(settings.allowRepeat),
+      secret: secret || generateSecret(settings.allowRepeat, cfg.digitCount),
       players: settings.names.map((name) => ({ name, rows: [] })),
       currentIndex: 0,
-      draft: emptyDraft(),
+      draft: Array(cfg.digitCount).fill(null),
       caret: 0,
       phase: "playing",
       winnerIndex: null,
@@ -475,7 +574,13 @@
 
   function renderPaper(player, interactive) {
     const rowCount = paperRowCount(player);
+    const count = game.digitCount;
+    const easy = game.columnFeedback;
     const rows = [];
+    const paper = document.querySelector(".paper");
+    if (paper) paper.classList.toggle("paper-easy", easy);
+    const headCell = document.querySelector(".paper thead th");
+    if (headCell) headCell.colSpan = 1 + count + (easy ? 0 : 1);
 
     for (let i = 0; i < rowCount; i += 1) {
       const filled = player.rows[i];
@@ -486,15 +591,21 @@
         ? filled.guess
         : isDraftRow || isPendingRow
           ? game.draft
-          : [null, null, null, null];
-      const feedback = filled ? feedbackMarkup(filled) : isPendingRow ? "รอ…" : "";
+          : Array(count).fill(null);
+      const feedback = !easy && filled ? feedbackMarkup(filled) : isPendingRow && !easy ? "รอ…" : "";
       const feedbackClass = filled?.win ? "feedback win" : "feedback";
 
       const digitCells = digits
         .map((digit, digitIndex) => {
           const active = isDraftRow && game.caret === digitIndex ? " cell-active" : "";
           const value = digit === null ? "" : String(digit);
-          return `<td class="digit${active}"${isDraftRow ? ` data-draft-cell="${digitIndex}"` : ""}>${value}</td>`;
+          let mark = "";
+          if (easy && filled?.marks) {
+            mark = `<span class="digit-mark">${markIcon(filled.marks[digitIndex])}</span>`;
+          } else if (easy) {
+            mark = `<span class="digit-mark"></span>`;
+          }
+          return `<td class="digit${active}"${isDraftRow ? ` data-draft-cell="${digitIndex}"` : ""}><span class="digit-num">${value}</span>${mark}</td>`;
         })
         .join("");
 
@@ -502,7 +613,7 @@
         <tr>
           <td class="idx">${i + 1}</td>
           ${digitCells}
-          <td class="${feedbackClass}">${feedback}</td>
+          ${easy ? "" : `<td class="${feedbackClass}">${feedback}</td>`}
         </tr>`);
     }
 
@@ -515,7 +626,7 @@
 
     const revealSecret =
       Array.isArray(game.secret) &&
-      game.secret.length === DIGIT_COUNT &&
+      game.secret.length === count &&
       (game.phase === "over" || game.reviewing);
     if (revealSecret) {
       els.paperSecret.hidden = false;
@@ -544,7 +655,7 @@
     els.gameTimer.hidden = true;
   }
 
-  function startGameTimer(endsAt) {
+  function startGameTimer(endsAt, onExpire = null) {
     stopGameTimer();
     if (!endsAt) return;
     online.endsAt = endsAt;
@@ -554,9 +665,25 @@
       els.gameTimer.textContent = `เหลือเวลาตอบ ${formatDuration(left)}`;
       if (left <= 30) els.gameTimer.classList.add("urgent");
       else els.gameTimer.classList.remove("urgent");
+      if (left <= 0) {
+        stopGameTimer();
+        if (typeof onExpire === "function") onExpire();
+      }
     };
     tick();
     timerTick = setInterval(tick, 250);
+  }
+
+  function startLocalRoundTimer() {
+    if (!game || !game.timeoutEnds || game.mode === "online") return;
+    if (game.phase !== "playing" || game.reviewing) return;
+    startGameTimer(Date.now() + game.secondsPerLine * 1000, () => {
+      if (!game || game.phase !== "playing" || game.mode === "online") return;
+      game.phase = "over";
+      game.timeoutLost = true;
+      renderPlay();
+      showResult({ reason: "timeout", local: true });
+    });
   }
 
   function meOnlineState(players) {
@@ -662,7 +789,7 @@
     game.draft[game.caret] = digit;
     const nextEmpty = game.draft.findIndex((value, index) => index > game.caret && value === null);
     if (nextEmpty !== -1) game.caret = nextEmpty;
-    else if (game.caret < DIGIT_COUNT - 1) game.caret += 1;
+    else if (game.caret < digitCount() - 1) game.caret += 1;
     renderPlay();
   }
 
@@ -687,10 +814,10 @@
     if (me?.botMode && me?.submitted) return;
     showPlayError("");
     if (game.draft.some((digit) => digit === null)) {
-      showPlayError("ต้องกรอกตัวเลข 4 หลักทุกครั้ง");
+      showPlayError(`ต้องกรอกตัวเลข ${digitCount()} หลักทุกครั้ง`);
       return;
     }
-    if (!game.allowRepeat && new Set(game.draft).size !== DIGIT_COUNT) {
+    if (!game.allowRepeat && new Set(game.draft).size !== digitCount()) {
       showPlayError("โหมดนี้ห้ามใช้เลขซ้ำ");
       return;
     }
@@ -702,6 +829,7 @@
       return;
     }
 
+    stopGameTimer();
     const player = currentPlayer();
     const result = evaluateGuess(game.draft, game.secret);
     player.rows.push({ guess: [...game.draft], ...result });
@@ -731,6 +859,7 @@
         return;
       }
       renderPlay();
+      startLocalRoundTimer();
       return;
     }
 
@@ -753,12 +882,17 @@
 
   function showResult(extra = null) {
     stopGameTimer();
-    const onlineEnded = game.mode === "online" && extra;
+    const onlineEnded = game.mode === "online" && extra && !extra.local;
     const winners = onlineEnded ? extra.winners || [] : [];
     const won = onlineEnded ? winners.length > 0 : game.winnerIndex !== null;
     const winner = !onlineEnded && won ? game.players[game.winnerIndex] : null;
 
-    if (onlineEnded) {
+    if (extra?.local && extra.reason === "timeout") {
+      els.resultKicker.textContent = "หมดเวลาแล้ว";
+      els.resultTitle.textContent = "ไม่ได้ส่งทัน";
+      els.resultSecret.textContent = secretText();
+      els.resultDetail.textContent = `โหมดยากมาก · ต้องตอบภายใน ${game.secondsPerLine} วินาทีต่อรอบ`;
+    } else if (onlineEnded) {
       if (extra.reason === "timeout") els.resultKicker.textContent = "หมดเวลาแล้ว";
       else if (extra.reason === "rounds") els.resultKicker.textContent = "ครบทุกบรรทัดแล้ว";
       else if (extra.reason === "abandoned") els.resultKicker.textContent = "เพื่อนออกจากห้อง";
@@ -766,27 +900,27 @@
 
       if (winners.length === 1) els.resultTitle.textContent = `${winners[0].name} ชนะ`;
       else if (winners.length > 1) els.resultTitle.textContent = `เสมอ · ${winners.map((w) => w.name).join(", ")}`;
-      else els.resultTitle.textContent = "ยังไม่มีใครทายถูก";
+      else els.resultTitle.textContent = extra.reason === "timeout" ? "หมดเวลารอบ · ไม่มีใครส่งทัน" : "ยังไม่มีใครทายถูก";
 
       els.resultSecret.textContent = secretText(extra.secret);
       els.resultDetail.textContent = won
-        ? "ทายถูก · รหัสคือตัวเลขด้านบน"
-        : `รหัสคือตัวเลขด้านบน · ${game.allowRepeat ? "โหมดซ้ำได้" : "โหมดไม่ซ้ำ"}`;
-      refreshLeaderboard();
+        ? "ทายถูกแล้ว · รหัสคือตัวเลขด้านบน"
+        : `รหัสคือตัวเลขด้านบน · ${difficultyLabel(game.difficulty)} · ${game.allowRepeat ? "โหมดซ้ำได้" : "โหมดไม่ซ้ำ"}`;
     } else {
       els.resultKicker.textContent = won ? "มีคนทายถูกแล้ว" : "หมดรอบแล้ว";
       els.resultTitle.textContent = won
         ? game.mode === "solo"
-          ? "ถูกต้องแล้ว"
+          ? "คุณชนะ"
           : `${winner.name} ชนะ`
         : "ยังไม่มีใครทายถูก";
       els.resultSecret.textContent = secretText();
       els.resultDetail.textContent = won
         ? `ทายถูกใน ${winner.rows.length} รอบ · รหัสคือตัวเลขด้านบน`
-        : `รหัสคือตัวเลขด้านบน · ${game.allowRepeat ? "โหมดซ้ำได้" : "โหมดไม่ซ้ำ"}`;
+        : `รหัสคือตัวเลขด้านบน · ${difficultyLabel(game.difficulty)} · ${game.allowRepeat ? "โหมดซ้ำได้" : "โหมดไม่ซ้ำ"}`;
     }
 
     screens.result.hidden = false;
+    if (onlineEnded || won) refreshLeaderboard();
   }
 
   function showGate({ first, shuffling }) {
@@ -806,6 +940,7 @@
     if (settings.mode === "solo") {
       showScreen("play");
       renderPlay();
+      startLocalRoundTimer();
       return;
     }
 
@@ -858,6 +993,7 @@
     }
     startFromSettings({
       mode: game.mode,
+      difficulty: game.difficulty,
       allowRepeat: game.allowRepeat,
       roundLimit: game.roundLimit,
       names: game.players.map((player) => player.name),
@@ -948,8 +1084,8 @@
     online.players = payload.players || [];
     els.lobbyTitle.textContent = payload.roomName || "ห้องรอเพื่อน";
     els.lobbyCode.textContent = payload.code;
-    const mins = Math.floor((payload.roundLimit * (online.secondsPerLine || SECONDS_PER_LINE)) / 60);
-    els.lobbySettings.textContent = `${payload.hasPassword ? "มีรหัสผ่าน · " : ""}${payload.allowRepeat ? "ซ้ำได้" : "ไม่ซ้ำ"} · ${payload.roundLimit} บรรทัด · เวลารวม ${mins} นาที`;
+    const mins = Math.floor((payload.roundLimit * (online.secondsPerLine || DEFAULT_SECONDS_PER_LINE)) / 60);
+    els.lobbySettings.textContent = `${payload.hasPassword ? "มีรหัสผ่าน · " : ""}${difficultyLabel(payload.difficulty)} · ${payload.allowRepeat ? "ซ้ำได้" : "ไม่ซ้ำ"} · ${payload.roundLimit} บรรทัด · ${payload.digitCount || 4} หลัก · เวลารอบ ${online.secondsPerLine || payload.secondsPerLine || DEFAULT_SECONDS_PER_LINE} วินาที`;
     els.lobbyLink.textContent = `ลิงก์นี้: ${location.origin} · ให้เพื่อนล็อกอินแล้วเข้าร่วมด้วยรหัส ${payload.code}`;
 
     els.lobbyPlayers.innerHTML = online.players
@@ -973,7 +1109,7 @@
       case "hello":
         online.lanAddresses = msg.lanAddresses || [];
         online.port = msg.port;
-        online.secondsPerLine = msg.secondsPerLine || SECONDS_PER_LINE;
+        online.secondsPerLine = msg.secondsPerLine || DEFAULT_SECONDS_PER_LINE;
         roomCatalog = msg.rooms || [];
         renderRoomList();
         break;
@@ -991,7 +1127,8 @@
         break;
       case "joined":
         online.you = msg.you;
-        online.secondsPerLine = msg.secondsPerLine || SECONDS_PER_LINE;
+        online.secondsPerLine = msg.secondsPerLine || DEFAULT_SECONDS_PER_LINE;
+        online.difficulty = msg.difficulty || "normal";
         showLobbyError("");
         showScreen("lobby");
         renderLobby(msg);
@@ -1032,8 +1169,11 @@
     online.waiting = false;
     online.players = msg.players || [];
     online.papers = null;
+    online.difficulty = msg.difficulty || "normal";
+    online.secondsPerLine = msg.secondsPerLine || difficultyConfig(online.difficulty).secondsPerLine;
     game = createGame({
       mode: "online",
+      difficulty: msg.difficulty || "normal",
       allowRepeat: msg.allowRepeat,
       roundLimit: msg.roundLimit,
       names: [online.you?.name || "คุณ"],
@@ -1065,10 +1205,19 @@
     if (!game) {
       game = createGame({
         mode: "online",
+        difficulty: msg.difficulty || online.difficulty || "normal",
         allowRepeat: msg.allowRepeat,
         roundLimit: msg.roundLimit,
         names: [online.you?.name || "คุณ"],
       });
+    }
+    if (msg.difficulty) {
+      const cfg = difficultyConfig(msg.difficulty);
+      game.difficulty = cfg.id;
+      game.digitCount = cfg.digitCount;
+      game.columnFeedback = cfg.columnFeedback;
+      game.timeoutEnds = cfg.timeoutEnds;
+      game.secondsPerLine = cfg.secondsPerLine;
     }
     game.secret = msg.secret;
     game.phase = "over";
@@ -1101,6 +1250,7 @@
           password: settings.password || "",
           allowRepeat: settings.allowRepeat,
           roundLimit: settings.roundLimit,
+          difficulty: settings.difficulty || "normal",
         });
       } else {
         sendSocket({
@@ -1166,6 +1316,15 @@
       setup.mode = btn.dataset.mode;
       setChoiceGroup("[data-mode]", "mode", setup.mode);
       updateSetupVisibility();
+      showSetupError("");
+    });
+  });
+
+  document.querySelectorAll("[data-difficulty]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setup.difficulty = btn.dataset.difficulty;
+      setChoiceGroup("[data-difficulty]", "difficulty", setup.difficulty);
+      updateDifficultyUi();
       showSetupError("");
     });
   });
@@ -1248,6 +1407,7 @@
     game.caret = 0;
     showScreen("play");
     renderPlay();
+    startLocalRoundTimer();
   });
 
   els.nextBtn.addEventListener("click", () => {
@@ -1344,7 +1504,7 @@
       game.caret = Math.max(0, game.caret - 1);
       renderPlay();
     } else if (event.key === "ArrowRight") {
-      game.caret = Math.min(DIGIT_COUNT - 1, game.caret + 1);
+      game.caret = Math.min(digitCount() - 1, game.caret + 1);
       renderPlay();
     }
   });
@@ -1381,4 +1541,6 @@
       showLoginError(error.message);
       els.demoLogin.hidden = false;
     });
+
+  updateDifficultyUi();
 })();

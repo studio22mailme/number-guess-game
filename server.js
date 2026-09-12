@@ -30,12 +30,22 @@ try {
 }
 
 const PORT = Number(process.env.PORT) || 3000;
-const DIGIT_COUNT = 4;
 const MAX_PLAYERS = 8;
 const MAX_ROUNDS = 30;
-const SECONDS_PER_LINE = 120;
+const DEFAULT_SECONDS_PER_LINE = 120;
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const ALLOW_DEMO_AUTH = process.env.ALLOW_DEMO_AUTH !== "0";
+
+const DIFFICULTY = {
+  easy: { id: "easy", digitCount: 4, secondsPerLine: 120, columnFeedback: true, timeoutEnds: false },
+  normal: { id: "normal", digitCount: 4, secondsPerLine: 120, columnFeedback: false, timeoutEnds: false },
+  hard: { id: "hard", digitCount: 5, secondsPerLine: 120, columnFeedback: false, timeoutEnds: false },
+  extreme: { id: "extreme", digitCount: 5, secondsPerLine: 30, columnFeedback: false, timeoutEnds: true },
+};
+
+function difficultyConfig(id) {
+  return DIFFICULTY[id] || DIFFICULTY.normal;
+}
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -121,6 +131,9 @@ function lobbyPayload(room) {
     hasPassword: Boolean(room.passwordHash),
     allowRepeat: room.allowRepeat,
     roundLimit: room.roundLimit,
+    difficulty: room.difficulty,
+    digitCount: room.digitCount,
+    secondsPerLine: room.secondsPerLine,
     status: room.status,
     players: publicPlayers(room),
     hostId: room.hostId,
@@ -139,6 +152,8 @@ function publicRoomList() {
       maxPlayers: MAX_PLAYERS,
       allowRepeat: room.allowRepeat,
       roundLimit: room.roundLimit,
+      difficulty: room.difficulty,
+      digitCount: room.digitCount,
       hostName: room.players.get(room.hostId)?.name || "",
     }));
 }
@@ -161,55 +176,65 @@ function generateCode() {
   throw new Error("ไม่สามารถสร้างรหัสห้องได้");
 }
 
-function generateSecret(allowRepeat) {
+function generateSecret(allowRepeat, digitCount) {
   if (allowRepeat) {
-    return Array.from({ length: DIGIT_COUNT }, () => Math.floor(Math.random() * 10));
+    return Array.from({ length: digitCount }, () => Math.floor(Math.random() * 10));
   }
   const pool = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
   for (let i = pool.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
-  return pool.slice(0, DIGIT_COUNT);
+  return pool.slice(0, digitCount);
 }
 
 function evaluateGuess(guess, secret) {
-  const exact = Array(DIGIT_COUNT).fill(false);
-  const secretUsed = Array(DIGIT_COUNT).fill(false);
+  const digitCount = secret.length;
+  const exact = Array(digitCount).fill(false);
+  const secretUsed = Array(digitCount).fill(false);
+  const marks = Array(digitCount).fill("none");
   let blacks = 0;
   let whites = 0;
 
-  for (let i = 0; i < DIGIT_COUNT; i += 1) {
+  for (let i = 0; i < digitCount; i += 1) {
     if (guess[i] === secret[i]) {
       exact[i] = true;
       secretUsed[i] = true;
+      marks[i] = "black";
       blacks += 1;
     }
   }
 
-  for (let i = 0; i < DIGIT_COUNT; i += 1) {
+  for (let i = 0; i < digitCount; i += 1) {
     if (exact[i]) continue;
-    for (let j = 0; j < DIGIT_COUNT; j += 1) {
+    for (let j = 0; j < digitCount; j += 1) {
       if (!secretUsed[j] && guess[i] === secret[j]) {
         secretUsed[j] = true;
+        marks[i] = "white";
         whites += 1;
         break;
       }
     }
   }
 
+  const win = blacks === digitCount;
+  if (win) {
+    for (let i = 0; i < digitCount; i += 1) marks[i] = "star";
+  }
+
   return {
     blacks,
     whites,
-    win: blacks === DIGIT_COUNT,
+    win,
     none: blacks === 0 && whites === 0,
+    marks,
   };
 }
 
-function enumerateCodes(allowRepeat) {
+function enumerateCodes(allowRepeat, digitCount) {
   const codes = [];
   const walk = (prefix) => {
-    if (prefix.length === DIGIT_COUNT) {
+    if (prefix.length === digitCount) {
       codes.push([...prefix]);
       return;
     }
@@ -224,30 +249,30 @@ function enumerateCodes(allowRepeat) {
   return codes;
 }
 
-function chooseBotGuess(history, allowRepeat) {
-  let candidates = enumerateCodes(allowRepeat);
+function chooseBotGuess(history, allowRepeat, digitCount) {
+  let candidates = enumerateCodes(allowRepeat, digitCount);
   for (const row of history) {
     candidates = candidates.filter((candidate) => {
       const result = evaluateGuess(row.guess, candidate);
       return result.blacks === row.blacks && result.whites === row.whites;
     });
   }
-  if (!candidates.length) return generateSecret(allowRepeat);
+  if (!candidates.length) return generateSecret(allowRepeat, digitCount);
   return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
 function assignBotGuess(player, room) {
   player.pending = {
-    guess: chooseBotGuess(player.rows, room.allowRepeat),
+    guess: chooseBotGuess(player.rows, room.allowRepeat, room.digitCount),
     fromBot: true,
   };
 }
 
 function beginRoundClock(room) {
-  room.roundEndsAt = Date.now() + SECONDS_PER_LINE * 1000;
+  room.roundEndsAt = Date.now() + room.secondsPerLine * 1000;
   for (const player of room.players.values()) {
     player.pending = null;
-    if (player.botMode) assignBotGuess(player, room);
+    if (player.botMode && !room.timeoutEnds) assignBotGuess(player, room);
   }
 }
 
@@ -257,7 +282,9 @@ function broadcastRoundState(room, type = "waiting") {
     players: publicPlayers(room),
     roundEndsAt: room.roundEndsAt,
     endsAt: room.roundEndsAt,
-    secondsPerLine: SECONDS_PER_LINE,
+    secondsPerLine: room.secondsPerLine,
+    difficulty: room.difficulty,
+    digitCount: room.digitCount,
   });
 }
 
@@ -430,6 +457,8 @@ async function endGame(room, reason, winners = []) {
       papers: papers.filter((paper) => paper.id === player.id),
       allowRepeat: room.allowRepeat,
       roundLimit: room.roundLimit,
+      difficulty: room.difficulty,
+      digitCount: room.digitCount,
     });
   }
   broadcastRoomList();
@@ -439,6 +468,11 @@ function maybeTimeout(room) {
   if (room.status !== "playing" || !room.roundEndsAt) return;
   if (Date.now() < room.roundEndsAt) return;
   room.roundEndsAt = null;
+
+  if (room.timeoutEnds) {
+    endGame(room, "timeout", []);
+    return;
+  }
 
   for (const player of room.players.values()) {
     if (player.pending) continue;
@@ -511,6 +545,7 @@ async function createRoom(ws, msg) {
   const password = String(msg.password || "");
   const allowRepeat = Boolean(msg.allowRepeat);
   const roundLimit = Number(msg.roundLimit);
+  const cfg = difficultyConfig(msg.difficulty);
 
   if (!name) {
     send(ws, "error", { message: "กรุณาใส่ชื่อ" });
@@ -542,6 +577,11 @@ async function createRoom(ws, msg) {
     hostId: player.id,
     allowRepeat,
     roundLimit,
+    difficulty: cfg.id,
+    digitCount: cfg.digitCount,
+    secondsPerLine: cfg.secondsPerLine,
+    columnFeedback: cfg.columnFeedback,
+    timeoutEnds: cfg.timeoutEnds,
     status: "lobby",
     secret: null,
     currentRound: 0,
@@ -559,7 +599,7 @@ async function createRoom(ws, msg) {
   send(ws, "joined", {
     you: { id: player.id, name: player.name, isHost: true, uid: player.uid },
     ...lobbyPayload(room),
-    secondsPerLine: SECONDS_PER_LINE,
+    secondsPerLine: room.secondsPerLine,
   });
   broadcast(room, "lobby", lobbyPayload(room));
   broadcastRoomList();
@@ -629,7 +669,7 @@ async function joinRoom(ws, msg) {
   send(ws, "joined", {
     you: { id: player.id, name: player.name, isHost: false, uid: player.uid },
     ...lobbyPayload(room),
-    secondsPerLine: SECONDS_PER_LINE,
+    secondsPerLine: room.secondsPerLine,
   });
   broadcast(room, "lobby", lobbyPayload(room));
   broadcastRoomList();
@@ -655,7 +695,7 @@ function startGame(ws) {
   }
 
   room.status = "playing";
-  room.secret = generateSecret(room.allowRepeat);
+  room.secret = generateSecret(room.allowRepeat, room.digitCount);
   room.currentRound = 0;
   room.endsAt = null;
 
@@ -673,9 +713,11 @@ function startGame(ws) {
     round: 1,
     roundLimit: room.roundLimit,
     allowRepeat: room.allowRepeat,
+    difficulty: room.difficulty,
+    digitCount: room.digitCount,
     roundEndsAt: room.roundEndsAt,
     endsAt: room.roundEndsAt,
-    secondsPerLine: SECONDS_PER_LINE,
+    secondsPerLine: room.secondsPerLine,
     players: publicPlayers(room),
   });
   broadcastRoomList();
@@ -710,11 +752,11 @@ function submitGuess(ws, msg) {
   }
 
   const digits = Array.isArray(msg.digits) ? msg.digits.map(Number) : [];
-  if (digits.length !== DIGIT_COUNT || digits.some((d) => !Number.isInteger(d) || d < 0 || d > 9)) {
-    send(ws, "error", { message: "ต้องกรอกตัวเลข 4 หลัก" });
+  if (digits.length !== room.digitCount || digits.some((d) => !Number.isInteger(d) || d < 0 || d > 9)) {
+    send(ws, "error", { message: `ต้องกรอกตัวเลข ${room.digitCount} หลัก` });
     return;
   }
-  if (!room.allowRepeat && new Set(digits).size !== DIGIT_COUNT) {
+  if (!room.allowRepeat && new Set(digits).size !== room.digitCount) {
     send(ws, "error", { message: "โหมดนี้ห้ามใช้เลขซ้ำ" });
     return;
   }
@@ -906,7 +948,7 @@ wss.on("connection", (ws) => {
   send(ws, "hello", {
     lanAddresses: getLanAddresses(),
     port: PORT,
-    secondsPerLine: SECONDS_PER_LINE,
+    secondsPerLine: DEFAULT_SECONDS_PER_LINE,
     rooms: publicRoomList(),
   });
 

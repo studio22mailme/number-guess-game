@@ -45,7 +45,7 @@
           <p class="brand-kicker">Tualek</p>
           <h1>เกมท้ายตัวเลข</h1>
           <p class="byline">พัฒนาโดย เฮียหนุ่มตองเอ็น</p>
-          <p class="tagline">ทายเลข 4 หลักให้ถูกก่อนเพื่อน<br />สนุกได้ทั้งเล่นคนเดียวและแข่งทีม</p>
+          <p class="tagline" id="setup-tagline">ทายเลข 4 หลักให้ถูกก่อนเพื่อน<br />สนุกได้ทั้งเล่นคนเดียวและแข่งทีม</p>
         </header>
 
         <div class="user-bar">
@@ -64,6 +64,17 @@
             <button type="button" class="choice" data-mode="multi" aria-pressed="false">ส่งเครื่อง</button>
             <button type="button" class="choice" data-mode="online" aria-pressed="false">คนละเครื่อง</button>
           </div>
+        </div>
+
+        <div class="field">
+          <p class="label">ระดับ</p>
+          <div class="choice-row choice-row-4" role="radiogroup" aria-label="ระดับความยาก">
+            <button type="button" class="choice" data-difficulty="easy" aria-pressed="false">ง่าย</button>
+            <button type="button" class="choice" data-difficulty="normal" aria-pressed="true">ปกติ</button>
+            <button type="button" class="choice" data-difficulty="hard" aria-pressed="false">ยาก</button>
+            <button type="button" class="choice" data-difficulty="extreme" aria-pressed="false">ยากมาก</button>
+          </div>
+          <p id="difficulty-hint" class="hint-block">ปกติ · ทายเลข 4 หลัก · สัญลักษณ์รวมด้านขวา</p>
         </div>
 
         <div class="field leaderboard-field">
