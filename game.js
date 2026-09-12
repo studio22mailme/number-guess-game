@@ -59,6 +59,7 @@
     readyBtn: document.getElementById("ready-btn"),
     paperBody: document.getElementById("paper-body"),
     paperOwner: document.getElementById("paper-owner"),
+    paperSecret: document.getElementById("paper-secret"),
     playStatus: document.getElementById("play-status"),
     waitFriends: document.getElementById("wait-friends"),
     playError: document.getElementById("play-error"),
@@ -505,6 +506,20 @@
       els.paperOwner.textContent = `กระดาษของ ${player.name}`;
     } else {
       els.paperOwner.textContent = "";
+    }
+
+    const revealSecret =
+      Array.isArray(game.secret) &&
+      game.secret.length === DIGIT_COUNT &&
+      (game.phase === "over" || game.reviewing);
+    if (revealSecret) {
+      els.paperSecret.hidden = false;
+      els.paperSecret.innerHTML = `เฉลย <span class="paper-secret-digits">${game.secret
+        .map((digit) => `<span class="paper-secret-digit">${digit}</span>`)
+        .join("")}</span>`;
+    } else {
+      els.paperSecret.hidden = true;
+      els.paperSecret.textContent = "";
     }
   }
 

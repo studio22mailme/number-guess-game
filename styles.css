@@ -653,6 +653,36 @@ body {
   display: none;
 }
 
+.paper-secret {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-weight: 700;
+  color: #7a2f12;
+}
+
+.paper-secret-digits {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.paper-secret-digit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 2px solid rgba(122, 47, 18, 0.45);
+  border-radius: 8px;
+  background: #fff7ec;
+  font-family: "Prompt", "Mitr", sans-serif;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #2b3a5c;
+}
+
 .empty-players {
   color: var(--muted);
   padding: 8px 2px;
