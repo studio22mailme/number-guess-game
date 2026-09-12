@@ -1023,6 +1023,42 @@ body {
   }
 }
 
+.music-toggle {
+  position: fixed;
+  z-index: 50;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  min-width: 7.4rem;
+  padding: 0.6rem 1rem;
+  border: 3px solid var(--line);
+  border-radius: 999px;
+  background: var(--sun);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  box-shadow: 0 8px 0 rgba(43, 58, 92, 0.14);
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.15s ease, box-shadow 0.12s ease;
+}
+
+.music-toggle:hover {
+  transform: translateY(-1px);
+}
+
+.music-toggle:active {
+  transform: translateY(2px);
+  box-shadow: 0 4px 0 rgba(43, 58, 92, 0.12);
+}
+
+.music-toggle[aria-pressed="true"] {
+  background: var(--mint);
+}
+
+.music-toggle[aria-pressed="false"] {
+  background: var(--sun);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .blob,
   .screen,
@@ -1035,7 +1071,8 @@ body {
 
   .choice,
   .btn,
-  .key {
+  .key,
+  .music-toggle {
     transition: none;
   }
 }
