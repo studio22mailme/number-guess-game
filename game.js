@@ -148,7 +148,72 @@
     lanAddresses: [],
     port: null,
     difficulty: "normal",
+    password: "",
+    reconnecting: false,
   };
+
+  const ROOM_SESSION_KEY = "tualek-room-session";
+
+  function saveRoomSession(extra = {}) {
+    if (!online.code) return;
+    try {
+      sessionStorage.setItem(
+        ROOM_SESSION_KEY,
+        JSON.stringify({
+          code: online.code,
+          name: online.you?.name || els.onlineNameInput?.value || "ผู้เล่น",
+          password: online.password || "",
+          difficulty: online.difficulty || "normal",
+          ...extra,
+        })
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function clearRoomSession() {
+    try {
+      sessionStorage.removeItem(ROOM_SESSION_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function readRoomSession() {
+    try {
+      const raw = sessionStorage.getItem(ROOM_SESSION_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  let rejoinAttempts = 0;
+
+  async function attemptAutoRejoin() {
+    const session = readRoomSession();
+    if (!session?.code || online.reconnecting) return;
+    if (rejoinAttempts >= 10) return;
+    online.reconnecting = true;
+    rejoinAttempts += 1;
+    try {
+      await ensureSocket({ skipAutoRejoin: true });
+      const idToken = await window.TualekAuth.getIdToken();
+      online.password = session.password || "";
+      sendSocket({
+        type: "rejoin",
+        idToken,
+        code: session.code,
+        name: session.name,
+        password: session.password || "",
+      });
+    } catch (error) {
+      console.error(error);
+      online.reconnecting = false;
+      showPlayError(error.message || "เชื่อมต่อกลับไม่สำเร็จ");
+    }
+  }
 
   function showScreen(name) {
     Object.entries(screens).forEach(([key, node]) => {
@@ -1022,7 +1087,7 @@
     return `${proto}//${location.host}`;
   }
 
-  function ensureSocket() {
+  function ensureSocket(options = {}) {
     return new Promise((resolve, reject) => {
       if (socket && socket.readyState === WebSocket.OPEN) {
         resolve(socket);
@@ -1038,6 +1103,11 @@
       const onOpen = () => {
         cleanup();
         resolve(ws);
+        if (!options.skipAutoRejoin && readRoomSession()?.code && !online.reconnecting) {
+          window.setTimeout(() => {
+            attemptAutoRejoin();
+          }, 120);
+        }
       };
       const onError = () => {
         cleanup();
@@ -1058,6 +1128,14 @@
         }
         handleSocketMessage(msg);
       });
+      ws.addEventListener("close", () => {
+        if (socket === ws) socket = null;
+        if (readRoomSession()?.code) {
+          window.setTimeout(() => {
+            attemptAutoRejoin();
+          }, 800);
+        }
+      });
     });
   }
 
@@ -1073,9 +1151,11 @@
     if (socket && socket.readyState === WebSocket.OPEN && online.code) {
       sendSocket({ type: "leave" });
     }
+    clearRoomSession();
     online.code = null;
     online.you = null;
     online.players = [];
+    online.password = "";
   }
 
   function renderLobby(payload) {
@@ -1118,6 +1198,12 @@
         renderRoomList();
         break;
       case "error":
+        online.reconnecting = false;
+        if (
+          /ไม่พบที่นั่ง|หมดอายุ|ปิดแล้ว|ไม่พบห้อง/.test(String(msg.message || ""))
+        ) {
+          clearRoomSession();
+        }
         if (!screens.lobby.hidden) showLobbyError(msg.message);
         else if (!screens.play.hidden) {
           online.waiting = false;
@@ -1129,15 +1215,46 @@
         online.you = msg.you;
         online.secondsPerLine = msg.secondsPerLine || DEFAULT_SECONDS_PER_LINE;
         online.difficulty = msg.difficulty || "normal";
+        online.code = msg.code;
+        online.reconnecting = false;
+        rejoinAttempts = 0;
+        saveRoomSession();
         showLobbyError("");
         showScreen("lobby");
         renderLobby(msg);
         break;
       case "lobby":
         renderLobby(msg);
+        saveRoomSession();
+        break;
+      case "rejoined":
+        online.you = msg.you;
+        online.code = msg.code;
+        online.difficulty = msg.difficulty || online.difficulty || "normal";
+        online.secondsPerLine = msg.secondsPerLine || DEFAULT_SECONDS_PER_LINE;
+        online.players = msg.players || [];
+        rejoinAttempts = 0;
+        online.reconnecting = false;
+        saveRoomSession();
+        if (msg.status === "playing") {
+          beginOnlineGame({
+            ...msg,
+            round: msg.round,
+            players: msg.players,
+          });
+          if (Array.isArray(msg.yourRows) && game) {
+            game.players[0].rows = msg.yourRows;
+          }
+          online.waiting = Boolean(msg.pending && !msg.botMode);
+          renderPlay();
+        } else {
+          showScreen("lobby");
+          renderLobby(msg);
+        }
         break;
       case "started":
         beginOnlineGame(msg);
+        saveRoomSession();
         break;
       case "waiting":
         online.players = msg.players || [];
@@ -1154,10 +1271,12 @@
         applyOnlineRoundResult(msg);
         break;
       case "ended":
+        clearRoomSession();
         finishOnlineGame(msg);
         break;
       case "left":
         online.code = null;
+        clearRoomSession();
         break;
       default:
         break;
@@ -1241,6 +1360,7 @@
     try {
       await ensureSocket();
       const idToken = await window.TualekAuth.getIdToken();
+      online.password = settings.password || "";
       if (settings.action === "create") {
         sendSocket({
           type: "create",

@@ -357,11 +357,15 @@
     const btn = document.getElementById("music-toggle");
     if (!btn) return;
     const on = playing && !muted;
-    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    if (btn.type === "checkbox") {
+      btn.checked = on;
+    } else {
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    }
     btn.title = on ? "ปิดเพลง" : "เปิดเพลง";
     btn.setAttribute("aria-label", on ? "ปิดเพลง" : "เปิดเพลง");
-    const icon = btn.querySelector(".music-icon");
-    if (icon) icon.textContent = on ? "🔊" : "🔇";
+    const text = document.getElementById("music-switch-text");
+    if (text) text.textContent = on ? "เปิด" : "ปิด";
   }
 
   function mountToggle() {
@@ -369,8 +373,10 @@
     if (!btn) return;
     if (!btn.dataset.bound) {
       btn.dataset.bound = "1";
-      btn.addEventListener("click", () => {
-        toggle();
+      btn.addEventListener("change", async () => {
+        if (btn.checked) await start();
+        else stop();
+        syncToggle();
       });
     }
     syncToggle();

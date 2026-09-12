@@ -16,9 +16,6 @@
     <span class="blob blob-c"></span>
     <span class="dot-grid"></span>
   </div>
-  <button type="button" id="music-toggle" class="music-toggle" aria-pressed="false" aria-label="เปิดเพลง" title="เปิดเพลง">
-    <span class="music-icon" aria-hidden="true">🔊</span>
-  </button>
   <div class="desk">
     <section id="screen-login" class="screen" hidden>
       <article class="sheet sheet-setup login-sheet">
@@ -58,6 +55,19 @@
             <p class="user-note">ล็อกอินแล้ว</p>
           </div>
           <button type="button" id="logout-btn" class="btn btn-ink user-logout">ออก</button>
+        </div>
+
+        <div class="field music-field">
+          <div class="music-switch-row">
+            <span class="label music-switch-label">เพลงพื้นหลัง</span>
+            <label class="music-switch">
+              <input type="checkbox" id="music-toggle" role="switch" />
+              <span class="music-switch-ui" aria-hidden="true">
+                <span class="music-switch-knob"></span>
+              </span>
+              <span class="music-switch-text" id="music-switch-text">ปิด</span>
+            </label>
+          </div>
         </div>
 
         <div class="field">

@@ -100,7 +100,7 @@ function getFirebaseWebConfig() {
 }
 
 function send(ws, type, payload = {}) {
-  if (ws.readyState === 1) {
+  if (ws && ws.readyState === 1) {
     ws.send(JSON.stringify({ type, ...payload }));
   }
 }
@@ -121,6 +121,7 @@ function publicPlayers(room) {
     submitted: Boolean(player.pending),
     botMode: Boolean(player.botMode),
     fromBot: Boolean(player.pending?.fromBot),
+    connected: Boolean(player.ws && player.ws.readyState === 1),
   }));
 }
 
@@ -784,7 +785,7 @@ function resumeHuman(ws) {
   broadcastRoundState(room, "waiting");
 }
 
-function leaveCurrent(ws) {
+function leaveCurrent(ws, { intentional = true } = {}) {
   lobbyWatchers.delete(ws);
   const code = ws.roomCode;
   if (!code) return;
@@ -796,12 +797,48 @@ function leaveCurrent(ws) {
   }
 
   const playerId = ws.playerId;
-  room.players.delete(playerId);
+  const player = room.players.get(playerId);
+
+  if (!intentional && player) {
+    if (player.ws && player.ws !== ws) {
+      ws.roomCode = null;
+      ws.playerId = null;
+      return;
+    }
+    player.ws = null;
+    player.connected = false;
+    player.disconnectAt = Date.now();
+    const staleId = playerId;
+    const staleCode = code;
+    setTimeout(() => {
+      const current = rooms.get(staleCode);
+      if (!current) return;
+      const stale = current.players.get(staleId);
+      if (!stale || stale.ws) return;
+      removePlayerFromRoom(current, staleId);
+    }, 90_000);
+    ws.roomCode = null;
+    ws.playerId = null;
+    if (room.status === "lobby") {
+      broadcast(room, "lobby", lobbyPayload(room));
+      broadcastRoomList();
+    } else if (room.status === "playing") {
+      broadcastRoundState(room, "waiting");
+    }
+    return;
+  }
+
+  removePlayerFromRoom(room, playerId);
   ws.roomCode = null;
   ws.playerId = null;
+}
+
+function removePlayerFromRoom(room, playerId) {
+  if (!room.players.has(playerId)) return;
+  room.players.delete(playerId);
 
   if (room.players.size === 0) {
-    deleteRoomIfEmpty(code);
+    deleteRoomIfEmpty(room.code);
     return;
   }
 
@@ -811,7 +848,8 @@ function leaveCurrent(ws) {
 
   if (room.status === "playing") {
     const remaining = [...room.players.values()];
-    if (remaining.length < 2) {
+    const connected = remaining.filter((item) => item.ws);
+    if (connected.length < 1 || remaining.length < 2) {
       endGame(room, "abandoned", []);
       return;
     }
@@ -822,6 +860,111 @@ function leaveCurrent(ws) {
   } else if (room.status === "lobby") {
     broadcast(room, "lobby", lobbyPayload(room));
     broadcastRoomList();
+  }
+}
+
+async function rejoinRoom(ws, msg) {
+  const auth = await verifyAuthToken(msg.idToken);
+  if (!auth) {
+    send(ws, "error", { message: "ต้องล็อกอินก่อนกลับเข้าห้อง" });
+    return;
+  }
+
+  const code = String(msg.code || "")
+    .trim()
+    .toUpperCase();
+  const password = String(msg.password || "");
+  if (!code) {
+    send(ws, "error", { message: "ไม่พบรหัสห้องสำหรับกลับเข้า" });
+    return;
+  }
+
+  const room = rooms.get(code);
+  if (!room) {
+    send(ws, "error", { message: "ห้องนี้หมดอายุหรือปิดแล้ว" });
+    return;
+  }
+
+  if (room.passwordHash && !verifyPassword(password, room.passwordHash)) {
+    send(ws, "error", { message: "รหัสผ่านห้องไม่ถูกต้อง" });
+    return;
+  }
+
+  let player = [...room.players.values()].find((item) => item.uid && item.uid === auth.uid);
+  if (!player) {
+    // ยังอยู่ในล็อบบี้ ให้เข้าใหม่ตามปกติ
+    if (room.status === "lobby") {
+      await joinRoom(ws, msg);
+      return;
+    }
+    send(ws, "error", { message: "ไม่พบที่นั่งเดิมในห้องนี้" });
+    return;
+  }
+
+  leaveCurrent(ws, { intentional: true });
+  if (player.ws && player.ws !== ws) {
+    const old = player.ws;
+    old.roomCode = null;
+    old.playerId = null;
+    try {
+      old.close();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  player.ws = ws;
+  player.connected = true;
+  player.disconnectAt = null;
+  ws.roomCode = room.code;
+  ws.playerId = player.id;
+  lobbyWatchers.delete(ws);
+
+  const base = {
+    you: { id: player.id, name: player.name, isHost: player.id === room.hostId, uid: player.uid },
+    ...lobbyPayload(room),
+    secondsPerLine: room.secondsPerLine,
+    rejoined: true,
+  };
+
+  if (room.status === "lobby") {
+    send(ws, "joined", base);
+    broadcast(room, "lobby", lobbyPayload(room));
+    broadcastRoomList();
+    return;
+  }
+
+  if (room.status === "playing") {
+    send(ws, "rejoined", {
+      ...base,
+      status: "playing",
+      round: room.currentRound + 1,
+      roundLimit: room.roundLimit,
+      allowRepeat: room.allowRepeat,
+      difficulty: room.difficulty,
+      digitCount: room.digitCount,
+      roundEndsAt: room.roundEndsAt,
+      endsAt: room.roundEndsAt,
+      players: publicPlayers(room),
+      yourRows: player.rows,
+      pending: Boolean(player.pending),
+      botMode: Boolean(player.botMode),
+    });
+    broadcastRoundState(room, "waiting");
+    return;
+  }
+
+  if (room.status === "ended") {
+    send(ws, "ended", {
+      reason: "ended",
+      secret: room.secret,
+      winners: [],
+      papers: [{ id: player.id, name: player.name, rows: player.rows }],
+      allowRepeat: room.allowRepeat,
+      roundLimit: room.roundLimit,
+      difficulty: room.difficulty,
+      digitCount: room.digitCount,
+    });
   }
 }
 
@@ -983,9 +1126,12 @@ wss.on("connection", (ws) => {
           resumeHuman(ws);
           break;
         case "leave":
-          leaveCurrent(ws);
+          leaveCurrent(ws, { intentional: true });
           send(ws, "left", {});
           broadcastRoomList();
+          break;
+        case "rejoin":
+          await rejoinRoom(ws, msg);
           break;
         default:
           send(ws, "error", { message: "คำสั่งไม่รู้จัก" });
@@ -997,7 +1143,7 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
-    leaveCurrent(ws);
+    leaveCurrent(ws, { intentional: false });
     broadcastRoomList();
   });
 });

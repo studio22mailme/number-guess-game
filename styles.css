@@ -753,8 +753,8 @@ body {
 
 .peg {
   display: inline-block;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border: 2px solid var(--line);
   border-radius: 50%;
   vertical-align: middle;
@@ -789,17 +789,36 @@ body {
 .feedback-pegs {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 7px;
+  justify-content: flex-start;
+  gap: 4px;
   flex-wrap: nowrap;
   white-space: nowrap;
-  min-width: 4.75rem;
+  max-width: 100%;
 }
 
 .paper td.feedback .peg,
 .paper td.feedback .mark-star {
   margin: 0;
   flex: 0 0 auto;
+}
+
+.paper td.feedback {
+  width: 42%;
+  min-width: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  background: #fff8ef;
+  padding: 0 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-align: left;
+}
+
+.paper td.feedback.win {
+  letter-spacing: 0;
+  color: #c45c00;
+  background: #fff1c9;
 }
 
 .paper td {
@@ -819,24 +838,6 @@ body {
 .paper td.digit {
   width: 11%;
   vertical-align: middle;
-}
-
-.paper td.feedback {
-  width: 48%;
-  min-width: 6.5rem;
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: 0;
-  background: #fff8ef;
-  padding: 0 12px;
-  white-space: nowrap;
-  overflow: visible;
-}
-
-.paper td.feedback.win {
-  letter-spacing: 0;
-  color: #c45c00;
-  background: #fff1c9;
 }
 
 .cell-active {
@@ -971,6 +972,37 @@ body {
 }
 
 @media (max-width: 640px) {
+  .desk {
+    padding: 0 0 18px;
+    justify-content: flex-start;
+  }
+
+  .screen {
+    width: 100%;
+  }
+
+  #screen-setup {
+    width: 100%;
+  }
+
+  .sheet-setup {
+    width: 100%;
+    max-width: none;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+    padding: 18px 14px 16px;
+    box-shadow: none;
+  }
+
+  .leaderboard-below {
+    width: 100%;
+    margin: 0;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+  }
+
   .choice-row-3 .choice {
     font-size: 0.82rem;
     padding: 8px 4px;
@@ -1016,12 +1048,14 @@ body {
   }
 
   .paper td.feedback {
-    width: 50%;
-    min-width: 6.25rem;
-    font-size: 0.9rem;
+    width: 44%;
+    min-width: 0;
+    font-size: 0.85rem;
     letter-spacing: 0;
-    padding: 0 10px;
+    padding: 0 6px;
     white-space: nowrap;
+    overflow: hidden;
+    text-align: left;
   }
 
   .sheet-play {
@@ -1038,50 +1072,72 @@ body {
   }
 }
 
-.music-toggle {
-  position: fixed;
-  z-index: 50;
-  top: max(10px, env(safe-area-inset-top));
-  right: max(10px, env(safe-area-inset-right));
-  width: 42px;
-  height: 42px;
-  min-width: 0;
-  padding: 0;
+.music-field {
+  margin-bottom: 4px;
+}
+
+.music-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.music-switch-label {
+  margin: 0;
+}
+
+.music-switch {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  border: 2px solid var(--line);
-  border-radius: 50%;
-  background: rgba(255, 250, 243, 0.92);
-  color: var(--ink);
-  font: inherit;
-  font-size: 1.15rem;
-  line-height: 1;
-  box-shadow: 0 4px 0 rgba(43, 58, 92, 0.12);
+  gap: 10px;
   cursor: pointer;
-  transition: transform 0.12s ease, background 0.15s ease, box-shadow 0.12s ease;
+  user-select: none;
 }
 
-.music-toggle .music-icon {
-  display: block;
-  transform: translateY(1px);
+.music-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
 }
 
-.music-toggle:hover {
-  transform: translateY(-1px);
+.music-switch-ui {
+  position: relative;
+  width: 52px;
+  height: 30px;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  background: #d7e0ef;
+  transition: background 0.15s ease;
+  flex: 0 0 auto;
 }
 
-.music-toggle:active {
-  transform: translateY(2px);
-  box-shadow: 0 2px 0 rgba(43, 58, 92, 0.12);
+.music-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--line);
+  transition: transform 0.15s ease;
 }
 
-.music-toggle[aria-pressed="true"] {
+.music-switch input:checked + .music-switch-ui {
   background: var(--mint);
 }
 
-.music-toggle[aria-pressed="false"] {
-  background: rgba(255, 250, 243, 0.92);
+.music-switch input:checked + .music-switch-ui .music-switch-knob {
+  transform: translateX(22px);
+}
+
+.music-switch-text {
+  min-width: 2.2em;
+  font-weight: 700;
+  color: #1b3358;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1097,7 +1153,8 @@ body {
   .choice,
   .btn,
   .key,
-  .music-toggle {
+  .music-switch-ui,
+  .music-switch-knob {
     transition: none;
   }
 }
