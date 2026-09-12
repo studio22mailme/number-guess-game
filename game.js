@@ -379,14 +379,17 @@
 
   function collectSettings() {
     if (setup.mode === "online") {
-      const user = currentUser();
-      const name = (user?.displayName || "ผู้เล่น").slice(0, 20);
+      const typedName = (els.onlineNameInput?.value || "").trim().slice(0, 20);
+      const name = typedName || (currentUser()?.displayName || "ผู้เล่น").slice(0, 20);
       const code = els.roomCodeInput.value.trim().toUpperCase();
       const roomName = els.roomTitleInput.value.trim().slice(0, 24);
       const password = els.roomPasswordInput.value;
       const joinPassword = els.joinPasswordInput.value;
       const rounds = Number(els.roundsInput.value);
 
+      if (!name) {
+        return { error: "กรุณาใส่ชื่อของคุณในห้อง" };
+      }
       if (!Number.isInteger(rounds) || rounds < 1 || rounds > MAX_ROUNDS) {
         return { error: `จำนวนบรรทัดต้องเป็นเลข 1–${MAX_ROUNDS}` };
       }

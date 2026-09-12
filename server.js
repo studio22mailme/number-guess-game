@@ -317,7 +317,8 @@ async function getLeaderboard(mode) {
 async function verifyAuthToken(idToken) {
   if (!idToken) return null;
   if (String(idToken).startsWith("demo:")) {
-    if (!ALLOW_DEMO_AUTH) return null;
+    // โหมดแขก: อนุญาตถ้าเปิด demo หรือยังไม่มี Firebase Admin
+    if (!ALLOW_DEMO_AUTH && admin) return null;
     const parts = String(idToken).split(":");
     return {
       uid: parts[2] || `demo_${Date.now()}`,
@@ -533,7 +534,7 @@ async function joinRoom(ws, msg) {
     return;
   }
   if ([...room.players.values()].some((player) => player.name === name)) {
-    send(ws, "error", { message: "ชื่อนี้มีในห้องแล้ว" });
+    send(ws, "error", { message: "ชื่อนี้มีในห้องแล้ว ลองเปลี่ยนชื่อของคุณ" });
     return;
   }
 
