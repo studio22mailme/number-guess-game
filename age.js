@@ -1,5 +1,10 @@
 (() => {
-  const STORAGE_KEY = "tualek-player-age";
+  const BIRTH_YEAR_KEY = "tualek-birth-year";
+  const LEGACY_AGE_KEY = "tualek-player-age";
+
+  function currentYear() {
+    return new Date().getFullYear();
+  }
 
   function ageBand(age) {
     const n = Number(age);
@@ -11,6 +16,12 @@
     return "senior";
   }
 
+  function ageFromBirthYear(birthYear) {
+    const age = currentYear() - Number(birthYear);
+    if (!Number.isInteger(age)) return null;
+    return Math.min(120, Math.max(1, age));
+  }
+
   function applyAgeTheme(age) {
     const band = ageBand(age);
     document.documentElement.dataset.ageTheme = band;
@@ -18,17 +29,39 @@
     return band;
   }
 
-  function readStoredAge() {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw == null || raw === "") return null;
-    const age = Number(raw);
-    if (!Number.isInteger(age) || age < 1 || age > 120) return null;
-    return age;
+  function readBirthYear() {
+    const rawYear = localStorage.getItem(BIRTH_YEAR_KEY);
+    if (rawYear != null && rawYear !== "") {
+      const year = Number(rawYear);
+      if (Number.isInteger(year) && year >= 1900 && year <= currentYear()) {
+        return year;
+      }
+    }
+
+    // ย้ายค่าเก่าที่เก็บเป็นอายุคงที่ → คิดเป็นปีเกิดจากปีปัจจุบันตอนย้าย
+    const legacy = localStorage.getItem(LEGACY_AGE_KEY);
+    if (legacy != null && legacy !== "") {
+      const age = Number(legacy);
+      if (Number.isInteger(age) && age >= 1 && age <= 120) {
+        const birthYear = currentYear() - age;
+        localStorage.setItem(BIRTH_YEAR_KEY, String(birthYear));
+        return birthYear;
+      }
+    }
+    return null;
   }
 
-  function saveAge(age) {
-    localStorage.setItem(STORAGE_KEY, String(age));
-    applyAgeTheme(age);
+  function readCurrentAge() {
+    const birthYear = readBirthYear();
+    if (birthYear == null) return null;
+    return ageFromBirthYear(birthYear);
+  }
+
+  function saveAge(ageAtEntry) {
+    const birthYear = currentYear() - ageAtEntry;
+    localStorage.setItem(BIRTH_YEAR_KEY, String(birthYear));
+    localStorage.removeItem(LEGACY_AGE_KEY);
+    applyAgeTheme(ageFromBirthYear(birthYear));
     if (window.TualekMusic?.start) {
       window.TualekMusic.start().catch(() => {});
     }
@@ -76,9 +109,9 @@
   }
 
   function mountAgeGate() {
-    const stored = readStoredAge();
-    if (stored != null) {
-      applyAgeTheme(stored);
+    const age = readCurrentAge();
+    if (age != null) {
+      applyAgeTheme(age);
       hideAgeGate();
       return;
     }
@@ -109,8 +142,9 @@
   }
 
   window.TualekAge = {
-    getAge: readStoredAge,
-    getBand: () => ageBand(readStoredAge() ?? 25),
+    getAge: readCurrentAge,
+    getBirthYear: readBirthYear,
+    getBand: () => ageBand(readCurrentAge() ?? 25),
     apply: applyAgeTheme,
     save: saveAge,
   };
