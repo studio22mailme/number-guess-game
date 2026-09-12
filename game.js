@@ -11,6 +11,7 @@
       secondsPerLine: 120,
       columnFeedback: true,
       timeoutEnds: false,
+      allowBot: true,
       hint: "ง่าย · เลข 4 หลัก · สัญลักษณ์ตรงคอลัมน์ตัวเลข",
     },
     normal: {
@@ -20,6 +21,7 @@
       secondsPerLine: 120,
       columnFeedback: false,
       timeoutEnds: false,
+      allowBot: true,
       hint: "ปกติ · เลข 4 หลัก · สัญลักษณ์รวมด้านขวา",
     },
     hard: {
@@ -29,7 +31,8 @@
       secondsPerLine: 120,
       columnFeedback: false,
       timeoutEnds: false,
-      hint: "ยาก · เลข 5 หลัก · สัญลักษณ์รวมด้านขวา",
+      allowBot: true,
+      hint: "ยาก · เลข 5 หลัก · ไม่ส่งทัน Bot เล่นแทน",
     },
     extreme: {
       id: "extreme",
@@ -38,7 +41,8 @@
       secondsPerLine: 30,
       columnFeedback: false,
       timeoutEnds: true,
-      hint: "ยากมาก · เลข 5 หลัก · ตอบใน 30 วินาที/รอบ ไม่งั้นจบ",
+      allowBot: true,
+      hint: "ยากมาก · เลข 5 หลัก · ตอบใน 30 วินาที/รอบ",
     },
   };
 
@@ -95,6 +99,7 @@
     lobbyPlayers: document.getElementById("lobby-players"),
     lobbyError: document.getElementById("lobby-error"),
     lobbyStartBtn: document.getElementById("lobby-start-btn"),
+    lobbyReadyBtn: document.getElementById("lobby-ready-btn"),
     lobbyLeaveBtn: document.getElementById("lobby-leave-btn"),
     gateKicker: document.getElementById("gate-kicker"),
     gateName: document.getElementById("gate-name"),
@@ -105,6 +110,7 @@
     paperSecret: document.getElementById("paper-secret"),
     playStatus: document.getElementById("play-status"),
     waitFriends: document.getElementById("wait-friends"),
+    botStatus: document.getElementById("bot-status"),
     playError: document.getElementById("play-error"),
     gameTimer: document.getElementById("game-timer"),
     keypad: document.getElementById("keypad"),
@@ -118,6 +124,7 @@
     resultDetail: document.getElementById("result-detail"),
     difficultyHint: null,
     setupTagline: document.getElementById("setup-tagline"),
+    onlineCount: document.getElementById("online-count"),
   };
 
   const setup = {
@@ -139,6 +146,7 @@
     you: null,
     code: null,
     roomName: "",
+    hostId: null,
     players: [],
     endsAt: null,
     round: 1,
@@ -376,9 +384,7 @@
       els.setupTagline.innerHTML = `ทายเลข ${cfg.digitCount} หลักให้ถูกก่อนเพื่อน<br />สนุกได้ทั้งเล่นคนเดียวและแข่งทีม`;
     }
     if (els.onlineHint) {
-      els.onlineHint.textContent = cfg.timeoutEnds
-        ? `ยากมาก · แต่ละบรรทัด ${cfg.secondsPerLine} วินาที · ไม่ส่งทัน = จบเกม`
-        : `แต่ละบรรทัดมี ${cfg.secondsPerLine === 120 ? "2 นาที" : `${cfg.secondsPerLine} วินาที`} · ส่งได้เลยไม่รอเพื่อน · ไม่ส่งทัน Bot เล่นแทน`;
+      els.onlineHint.textContent = `แต่ละบรรทัดมี ${cfg.secondsPerLine === 120 ? "2 นาที" : `${cfg.secondsPerLine} วินาที`} · ส่งได้เลยไม่รอเพื่อน · ไม่ส่งทันหรือหลุด Bot เล่นแทน`;
     }
     updateTimePreview();
   }
@@ -396,10 +402,10 @@
     }
     const cfg = difficultyConfig(setup.difficulty);
     els.timePreview.hidden = false;
-    if (cfg.timeoutEnds) {
-      els.timePreview.textContent = `ยากมาก · ตอบภายใน ${cfg.secondsPerLine} วินาทีต่อบรรทัด · ไม่ทัน = จบเกม`;
+    if (cfg.secondsPerLine <= 30) {
+      els.timePreview.textContent = `ยากมาก · ตอบภายใน ${cfg.secondsPerLine} วินาทีต่อบรรทัด · ไม่ทันหรือหลุด Bot เล่นแทน`;
     } else {
-      els.timePreview.textContent = `แต่ละบรรทัดมีเวลา ${cfg.secondsPerLine === 120 ? "2 นาที" : `${cfg.secondsPerLine} วินาที`} · ส่งได้เลยไม่ต้องรอเพื่อน`;
+      els.timePreview.textContent = `แต่ละบรรทัดมีเวลา ${cfg.secondsPerLine === 120 ? "2 นาที" : `${cfg.secondsPerLine} วินาที`} · ไม่ทันหรือหลุด Bot เล่นแทน`;
     }
   }
 
@@ -432,8 +438,27 @@
       els.startBtn.textContent = "เริ่มเกม";
     }
 
-    els.leaderboardLabel.textContent = `อันดับชนะ · ${modeLabel(setup.mode)}`;
+    if (els.leaderboardLabel) {
+      els.leaderboardLabel.textContent = "อันดับชนะ · คนละเครื่อง";
+    }
     refreshLeaderboard();
+  }
+
+  function setOnlineCount(count) {
+    if (!els.onlineCount) return;
+    const n = Math.max(0, Number(count) || 0);
+    els.onlineCount.textContent = String(n);
+  }
+
+  async function refreshOnlineCount() {
+    try {
+      const res = await fetch("/api/online-count");
+      if (!res.ok) return;
+      const data = await res.json();
+      setOnlineCount(data.onlineCount);
+    } catch {
+      /* ignore */
+    }
   }
 
   function renderPlayerList() {
@@ -500,7 +525,7 @@
 
   async function refreshLeaderboard() {
     try {
-      const rows = await window.TualekAuth.fetchLeaderboard(setup.mode);
+      const rows = await window.TualekAuth.fetchLeaderboard("online");
       if (!rows.length) {
         els.leaderboardList.innerHTML = `<li class="empty-players">ยังไม่มีสถิติในโหมดนี้</li>`;
         return;
@@ -756,6 +781,25 @@
     return players.find((player) => player.id === online.you.id) || null;
   }
 
+  function renderBotStatus(players) {
+    if (!els.botStatus) return;
+    if (game?.mode !== "online" || game.phase !== "playing" || game.reviewing) {
+      els.botStatus.hidden = true;
+      return;
+    }
+    const botPlayers = (players || []).filter((player) => player.botMode);
+    if (!botPlayers.length) {
+      els.botStatus.hidden = true;
+      return;
+    }
+    els.botStatus.hidden = false;
+    const names = botPlayers.map((player) => player.name).join(", ");
+    els.botStatus.textContent =
+      botPlayers.length === 1
+        ? `${names} กำลังให้ Bot เล่นแทน`
+        : `Bot กำลังเล่นแทน: ${names}`;
+  }
+
   function renderWaitFriends(players) {
     const me = meOnlineState(players);
     if (!players || (!online.waiting && !me?.botMode)) {
@@ -833,8 +877,10 @@
 
     if (game.mode === "online") {
       renderWaitFriends(online.players);
+      renderBotStatus(online.players);
     } else {
       els.waitFriends.hidden = true;
+      if (els.botStatus) els.botStatus.hidden = true;
     }
   }
 
@@ -960,17 +1006,20 @@
     } else if (onlineEnded) {
       if (extra.reason === "timeout") els.resultKicker.textContent = "หมดเวลาแล้ว";
       else if (extra.reason === "rounds") els.resultKicker.textContent = "ครบทุกบรรทัดแล้ว";
-      else if (extra.reason === "abandoned") els.resultKicker.textContent = "เพื่อนออกจากห้อง";
+      else if (extra.reason === "abandoned") els.resultKicker.textContent = "คู่แข่งหลุดจากห้อง";
       else els.resultKicker.textContent = won ? "มีคนทายถูกแล้ว" : "จบเกม";
 
       if (winners.length === 1) els.resultTitle.textContent = `${winners[0].name} ชนะ`;
       else if (winners.length > 1) els.resultTitle.textContent = `เสมอ · ${winners.map((w) => w.name).join(", ")}`;
+      else if (extra.reason === "abandoned") els.resultTitle.textContent = "ไม่มีใครชนะ";
       else els.resultTitle.textContent = extra.reason === "timeout" ? "หมดเวลารอบ · ไม่มีใครส่งทัน" : "ยังไม่มีใครทายถูก";
 
       els.resultSecret.textContent = secretText(extra.secret);
       els.resultDetail.textContent = won
         ? "ทายถูกแล้ว · รหัสคือตัวเลขด้านบน"
-        : `รหัสคือตัวเลขด้านบน · ${difficultyLabel(game.difficulty)} · ${game.allowRepeat ? "โหมดซ้ำได้" : "โหมดไม่ซ้ำ"}`;
+        : extra.reason === "abandoned"
+          ? "เหลือผู้เล่นไม่พอ · จบเกมโดยไม่มีผู้ชนะ"
+          : `รหัสคือตัวเลขด้านบน · ${difficultyLabel(game.difficulty)} · ${game.allowRepeat ? "โหมดซ้ำได้" : "โหมดไม่ซ้ำ"}`;
     } else {
       els.resultKicker.textContent = won ? "มีคนทายถูกแล้ว" : "หมดรอบแล้ว";
       els.resultTitle.textContent = won
@@ -1154,6 +1203,7 @@
     clearRoomSession();
     online.code = null;
     online.you = null;
+    online.hostId = null;
     online.players = [];
     online.password = "";
   }
@@ -1162,26 +1212,56 @@
     online.code = payload.code;
     online.roomName = payload.roomName || "";
     online.players = payload.players || [];
+    online.hostId = payload.hostId || online.hostId || null;
     els.lobbyTitle.textContent = payload.roomName || "ห้องรอเพื่อน";
     els.lobbyCode.textContent = payload.code;
-    const mins = Math.floor((payload.roundLimit * (online.secondsPerLine || DEFAULT_SECONDS_PER_LINE)) / 60);
     els.lobbySettings.textContent = `${payload.hasPassword ? "มีรหัสผ่าน · " : ""}${difficultyLabel(payload.difficulty)} · ${payload.allowRepeat ? "ซ้ำได้" : "ไม่ซ้ำ"} · ${payload.roundLimit} บรรทัด · ${payload.digitCount || 4} หลัก · เวลารอบ ${online.secondsPerLine || payload.secondsPerLine || DEFAULT_SECONDS_PER_LINE} วินาที`;
     els.lobbyLink.textContent = `ลิงก์นี้: ${location.origin} · ให้เพื่อนล็อกอินแล้วเข้าร่วมด้วยรหัส ${payload.code}`;
 
+    const isHost = online.you?.id === payload.hostId;
+    const me = meOnlineState(online.players);
+    const allReady = online.players.length >= 2 && online.players.every((player) => player.ready);
+    const waitingNames = online.players.filter((player) => !player.ready).map((player) => player.name);
+
     els.lobbyPlayers.innerHTML = online.players
-      .map(
-        (player) => `
+      .map((player) => {
+        const readyClass = player.ready ? "is-ready" : "is-wait";
+        const readyText = player.ready ? "พร้อม" : "รอพร้อม";
+        const kick =
+          isHost && !player.isHost && !player.ready
+            ? `<button type="button" class="btn btn-ink kick-btn" data-kick-id="${escapeHtml(player.id)}">เตะ</button>`
+            : "";
+        return `
         <li class="player-item">
-          <span>${escapeHtml(player.name)}${player.isHost ? " (เจ้าของห้อง)" : ""}${online.you?.id === player.id ? " · คุณ" : ""}</span>
-        </li>`
-      )
+          <span>${escapeHtml(player.name)}${player.isHost ? " (เจ้าของห้อง)" : ""}${online.you?.id === player.id ? " · คุณ" : ""}
+            <span class="ready-pill ${readyClass}">${readyText}</span>
+          </span>
+          ${kick}
+        </li>`;
+      })
       .join("");
 
-    const isHost = online.you?.id === payload.hostId;
+    if (els.lobbyReadyBtn) {
+      els.lobbyReadyBtn.hidden = false;
+      const ready = Boolean(me?.ready);
+      els.lobbyReadyBtn.textContent = ready ? "ยกเลิกพร้อม" : "กดพร้อม";
+      els.lobbyReadyBtn.classList.toggle("btn-start", !ready);
+      els.lobbyReadyBtn.classList.toggle("btn-ink", ready);
+    }
+
     els.lobbyStartBtn.hidden = !isHost;
-    els.lobbyStartBtn.disabled = online.players.length < 2;
-    els.lobbyStartBtn.textContent =
-      online.players.length < 2 ? "รอเพื่อนอย่างน้อย 2 คน" : "เริ่มเกม";
+    els.lobbyStartBtn.disabled = !allReady;
+    if (!isHost) {
+      els.lobbyStartBtn.textContent = "เริ่มเกม";
+    } else if (online.players.length < 2) {
+      els.lobbyStartBtn.textContent = "รอเพื่อนอย่างน้อย 2 คน";
+    } else if (!allReady) {
+      els.lobbyStartBtn.textContent = waitingNames.length
+        ? `รอพร้อม: ${waitingNames.join(", ")}`
+        : "รอเพื่อนกดพร้อม";
+    } else {
+      els.lobbyStartBtn.textContent = "เริ่มเกม";
+    }
   }
 
   function handleSocketMessage(msg) {
@@ -1191,7 +1271,11 @@
         online.port = msg.port;
         online.secondsPerLine = msg.secondsPerLine || DEFAULT_SECONDS_PER_LINE;
         roomCatalog = msg.rooms || [];
+        if (msg.onlineCount != null) setOnlineCount(msg.onlineCount);
         renderRoomList();
+        break;
+      case "presence":
+        if (msg.onlineCount != null) setOnlineCount(msg.onlineCount);
         break;
       case "roomList":
         roomCatalog = msg.rooms || [];
@@ -1216,6 +1300,7 @@
         online.secondsPerLine = msg.secondsPerLine || DEFAULT_SECONDS_PER_LINE;
         online.difficulty = msg.difficulty || "normal";
         online.code = msg.code;
+        online.hostId = msg.hostId || null;
         online.reconnecting = false;
         rejoinAttempts = 0;
         saveRoomSession();
@@ -1230,6 +1315,7 @@
       case "rejoined":
         online.you = msg.you;
         online.code = msg.code;
+        online.hostId = msg.hostId || online.hostId || null;
         online.difficulty = msg.difficulty || online.difficulty || "normal";
         online.secondsPerLine = msg.secondsPerLine || DEFAULT_SECONDS_PER_LINE;
         online.players = msg.players || [];
@@ -1276,7 +1362,24 @@
         break;
       case "left":
         online.code = null;
+        online.you = null;
+        online.hostId = null;
+        online.players = [];
         clearRoomSession();
+        stopGameTimer();
+        game = null;
+        showScreen("setup");
+        updateSetupVisibility();
+        if (msg.reason === "kicked") {
+          showSetupError("ถูกเตะออกจากห้องเพราะยังไม่กดพร้อม");
+        } else if (msg.reason === "bot-afk") {
+          showSetupError("Bot เล่นแทนครบ 5 รอบ · ออกจากห้องแล้ว");
+        }
+        try {
+          sendSocket({ type: "watchRooms" });
+        } catch {
+          /* ignore */
+        }
         break;
       default:
         break;
@@ -1415,6 +1518,8 @@
     }
     showScreen("setup");
     updateSetupVisibility();
+    refreshOnlineCount();
+    ensureSocket().catch(() => {});
     if (!setup.names.length && currentUser()?.displayName) {
       setup.names = [currentUser().displayName];
       renderPlayerList();
@@ -1513,6 +1618,22 @@
   els.lobbyStartBtn.addEventListener("click", () => {
     showLobbyError("");
     sendSocket({ type: "start" });
+  });
+
+  if (els.lobbyReadyBtn) {
+    els.lobbyReadyBtn.addEventListener("click", () => {
+      showLobbyError("");
+      const me = meOnlineState(online.players);
+      const nextReady = !me?.ready;
+      sendSocket({ type: "ready", ready: nextReady });
+    });
+  }
+
+  els.lobbyPlayers.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-kick-id]");
+    if (!btn) return;
+    showLobbyError("");
+    sendSocket({ type: "kick", playerId: btn.dataset.kickId });
   });
 
   els.lobbyLeaveBtn.addEventListener("click", () => {

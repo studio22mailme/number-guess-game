@@ -16,6 +16,25 @@
     <span class="blob blob-c"></span>
     <span class="dot-grid"></span>
   </div>
+  <div class="online-badge" id="online-badge" aria-live="polite">
+    ออนไลน์ <strong id="online-count">0</strong>
+  </div>
+
+  <div id="age-gate" class="age-gate" hidden>
+    <article class="age-gate-card" role="dialog" aria-modal="true" aria-labelledby="age-gate-title">
+      <p class="brand-kicker">Tualek</p>
+      <h2 id="age-gate-title">ยินดีต้อนรับ</h2>
+      <p class="age-gate-copy">กรอกอายุของคุณ เพื่อปรับโทนสีและขนาดตัวอักษรให้เข้ากับสายตา</p>
+      <form id="age-form" class="age-form">
+        <label class="label" for="age-input">อายุ (ปี)</label>
+        <input id="age-input" type="number" min="1" max="120" inputmode="numeric" placeholder="เช่น 25" required />
+        <p id="age-error" class="error" hidden></p>
+        <button type="submit" id="age-submit" class="btn btn-start">เริ่มใช้งาน</button>
+      </form>
+      <p class="age-gate-note">บันทึกไว้ในเครื่องนี้เท่านั้น · ไม่ส่งไปเซิร์ฟเวอร์</p>
+    </article>
+  </div>
+
   <div class="desk">
     <section id="screen-login" class="screen" hidden>
       <article class="sheet sheet-setup login-sheet">
@@ -61,11 +80,11 @@
           <div class="music-switch-row">
             <span class="label music-switch-label">เพลงพื้นหลัง</span>
             <label class="music-switch">
-              <input type="checkbox" id="music-toggle" role="switch" />
+              <input type="checkbox" id="music-toggle" role="switch" checked />
               <span class="music-switch-ui" aria-hidden="true">
                 <span class="music-switch-knob"></span>
               </span>
-              <span class="music-switch-text" id="music-switch-text">ปิด</span>
+              <span class="music-switch-text" id="music-switch-text">เปิด</span>
             </label>
           </div>
         </div>
@@ -86,15 +105,6 @@
             <button type="button" class="choice" data-difficulty="normal" aria-pressed="true">ปกติ</button>
             <button type="button" class="choice" data-difficulty="hard" aria-pressed="false">ยาก</button>
             <button type="button" class="choice" data-difficulty="extreme" aria-pressed="false">ยากมาก</button>
-          </div>
-        </div>
-
-        <div class="field" id="players-field" hidden>
-          <p class="label">ชื่อผู้เล่น <span class="hint">อย่างน้อย 2 คน · กระดาษแยกกัน · สลับเครื่องเดียวกัน</span></p>
-          <ul id="player-list" class="player-list"></ul>
-          <div class="add-row">
-            <input id="player-name-input" type="text" maxlength="20" placeholder="พิมพ์ชื่อเพื่อน" autocomplete="off" />
-            <button type="button" id="add-player-btn" class="btn btn-ink">เพิ่มชื่อ</button>
           </div>
         </div>
 
@@ -142,12 +152,21 @@
           <p id="time-preview" class="hint-block" hidden></p>
         </div>
 
+        <div class="field" id="players-field" hidden>
+          <p class="label">ชื่อผู้เล่น <span class="hint">อย่างน้อย 2 คน · กระดาษแยกกัน · สลับเครื่องเดียวกัน</span></p>
+          <ul id="player-list" class="player-list"></ul>
+          <div class="add-row">
+            <input id="player-name-input" type="text" maxlength="20" placeholder="พิมพ์ชื่อเพื่อน" autocomplete="off" />
+            <button type="button" id="add-player-btn" class="btn btn-ink">เพิ่มชื่อ</button>
+          </div>
+        </div>
+
         <p id="setup-error" class="error" hidden></p>
         <button type="button" id="start-btn" class="btn btn-start">เริ่มเกม</button>
       </article>
 
       <aside class="leaderboard-below" aria-label="สถิติ">
-        <p class="label" id="leaderboard-label">อันดับชนะ · คนเดียว</p>
+        <p class="label" id="leaderboard-label">อันดับชนะ · คนละเครื่อง</p>
         <ol id="leaderboard-list" class="leaderboard-list">
           <li class="empty-players">ยังไม่มีสถิติ</li>
         </ol>
@@ -166,6 +185,7 @@
         <p class="label">ผู้เล่นในห้อง</p>
         <ul id="lobby-players" class="player-list"></ul>
         <p id="lobby-error" class="error" hidden></p>
+        <button type="button" id="lobby-ready-btn" class="btn btn-ink">กดพร้อม</button>
         <button type="button" id="lobby-start-btn" class="btn btn-start" hidden>เริ่มเกม</button>
         <button type="button" id="lobby-leave-btn" class="btn btn-ink lobby-leave">ออกจากห้อง</button>
       </article>
@@ -240,6 +260,7 @@
         </div>
 
         <div class="play-footer">
+          <p id="bot-status" class="bot-status" hidden></p>
           <p id="play-status" class="play-status"></p>
           <p id="wait-friends" class="wait-friends" hidden></p>
           <p id="play-error" class="error" hidden></p>
@@ -268,6 +289,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
   <script src="auth.js"></script>
+  <script src="age.js"></script>
   <script src="music.js"></script>
   <script src="game.js"></script>
 </body>

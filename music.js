@@ -37,7 +37,10 @@
   let master = null;
   let filter = null;
   let playing = false;
-  let muted = localStorage.getItem(STORAGE_KEY) !== "1";
+  if (localStorage.getItem(STORAGE_KEY) == null) {
+    localStorage.setItem(STORAGE_KEY, "1");
+  }
+  let muted = localStorage.getItem(STORAGE_KEY) === "0";
   let nextNoteTime = 0;
   let step = 0;
   let barIndex = 0;
@@ -45,6 +48,10 @@
   let timerId = null;
   let crackleNode = null;
   let startedOnce = false;
+
+  function preferMusicOn() {
+    return localStorage.getItem(STORAGE_KEY) !== "0";
+  }
 
   function midiToHz(midi) {
     return 440 * Math.pow(2, (midi - 69) / 12);
@@ -356,7 +363,7 @@
   function syncToggle() {
     const btn = document.getElementById("music-toggle");
     if (!btn) return;
-    const on = playing && !muted;
+    const on = preferMusicOn();
     if (btn.type === "checkbox") {
       btn.checked = on;
     } else {
@@ -382,10 +389,9 @@
     syncToggle();
   }
 
-  // Auto-start after first user gesture if previously enabled
+  // Auto-start after first user gesture (default: on)
   function armAutoStart() {
-    const preferOn = localStorage.getItem(STORAGE_KEY) === "1";
-    if (!preferOn || startedOnce) return;
+    if (!preferMusicOn() || startedOnce) return;
     const once = () => {
       document.removeEventListener("pointerdown", once);
       document.removeEventListener("keydown", once);
