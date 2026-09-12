@@ -27,6 +27,7 @@
     playersField: document.getElementById("players-field"),
     onlineField: document.getElementById("online-field"),
     roomList: document.getElementById("room-list"),
+    onlineNameInput: document.getElementById("online-name-input"),
     roomTitleInput: document.getElementById("room-title-input"),
     roomPasswordInput: document.getElementById("room-password-input"),
     joinPasswordInput: document.getElementById("join-password-input"),
