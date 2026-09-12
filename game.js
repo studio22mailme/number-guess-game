@@ -190,10 +190,10 @@
     if (row.win) {
       return `<span class="feedback-pegs">${'<span class="mark-star">★</span>'.repeat(DIGIT_COUNT)}</span>`;
     }
+    if (row.none) return `<span class="feedback-pegs"><span class="peg none"></span></span>`;
     const parts = [];
     for (let i = 0; i < row.blacks; i += 1) parts.push('<span class="peg black"></span>');
     for (let i = 0; i < row.whites; i += 1) parts.push('<span class="peg white"></span>');
-    while (parts.length < DIGIT_COUNT) parts.push('<span class="peg none"></span>');
     return `<span class="feedback-pegs">${parts.join("")}</span>`;
   }
 

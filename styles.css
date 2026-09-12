@@ -752,9 +752,9 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  width: 100%;
-  min-width: 4.5rem;
+  gap: 5px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 .paper td.feedback .peg,
@@ -763,30 +763,32 @@ body {
 }
 
 .paper td {
-  height: 40px;
-  font-size: 1.1rem;
+  height: 42px;
+  font-size: 1.2rem;
   font-weight: 700;
   background: #fffef9;
 }
 
 .paper td.idx {
-  width: 8%;
-  font-size: 0.85rem;
+  width: 9%;
+  font-size: 0.95rem;
   background: #e7f8ff;
   color: #1b3358;
 }
 
 .paper td.digit {
-  width: 11%;
+  width: 12%;
 }
 
 .paper td.feedback {
-  width: 48%;
-  font-size: 0.95rem;
+  width: 43%;
+  min-width: 5.5rem;
+  font-size: 1rem;
   font-weight: 600;
   letter-spacing: 0;
   background: #fff8ef;
-  padding: 0 8px;
+  padding: 0 10px;
+  white-space: nowrap;
 }
 
 .paper td.feedback.win {
@@ -958,13 +960,21 @@ body {
   }
 
   .paper td {
-    height: 34px;
-    font-size: 1.05rem;
+    height: 38px;
+    font-size: 1.1rem;
+  }
+
+  .paper td.digit {
+    width: 11%;
   }
 
   .paper td.feedback {
-    font-size: 0.85rem;
+    width: 46%;
+    min-width: 5.25rem;
+    font-size: 0.9rem;
     letter-spacing: 0;
+    padding: 0 8px;
+    white-space: nowrap;
   }
 
   .sheet-play {
