@@ -72,7 +72,7 @@
           <p class="brand-kicker">Tualek</p>
           <h1>เกมท้ายตัวเลข</h1>
           <p class="byline">พัฒนาโดย เฮียหนุ่มตองเอ็น</p>
-          <p class="tagline" id="setup-tagline">ทายเลข 4 หลักให้ถูกก่อนเพื่อน<br />สนุกได้ทั้งเล่นคนเดียวและแข่งทีม</p>
+          <p class="tagline" id="setup-tagline">ฝึกสมองสนุกได้ทั้งเล่นคนเดียวและแข่งกับเพื่อน</p>
         </header>
 
         <div class="user-bar">
@@ -189,9 +189,15 @@
         <p id="lobby-settings" class="hint-block"></p>
         <div class="share-row" id="lobby-share">
           <button type="button" id="share-copy-btn" class="btn btn-ink">คัดลอกลิงก์</button>
-          <button type="button" id="share-line-btn" class="btn btn-ink">แชร์ไลน์</button>
-          <button type="button" id="share-fb-btn" class="btn btn-ink">แชร์เฟสบุ๊ค</button>
-          <button type="button" id="share-native-btn" class="btn btn-ink">แชร์อื่นๆ</button>
+          <button type="button" id="share-btn" class="btn btn-ink share-btn">
+            <span class="share-label">แชร์</span>
+            <svg class="share-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+              <circle cx="18" cy="5" r="2.5" fill="currentColor" />
+              <circle cx="6" cy="12" r="2.5" fill="currentColor" />
+              <circle cx="18" cy="19" r="2.5" fill="currentColor" />
+              <path d="M8.2 13.1 15.8 17.4M15.8 6.6 8.2 10.9" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" />
+            </svg>
+          </button>
         </div>
         <p class="label">ผู้เล่นในห้อง</p>
         <ul id="lobby-players" class="player-list"></ul>
@@ -276,6 +282,7 @@
           <p id="wait-friends" class="wait-friends" hidden></p>
           <p id="play-error" class="error" hidden></p>
           <button type="button" id="quit-btn" class="quit-btn">ออกจากเกม</button>
+          <div id="bot-papers" class="bot-papers" hidden></div>
         </div>
       </div>
     </section>
@@ -293,6 +300,17 @@
         </div>
       </article>
     </section>
+  </div>
+
+  <div id="confirm-leave" class="confirm-leave" hidden>
+    <article class="confirm-leave-card" role="dialog" aria-modal="true" aria-labelledby="confirm-leave-title">
+      <h2 id="confirm-leave-title">ออกจากหน้านี้?</h2>
+      <p id="confirm-leave-message" class="confirm-leave-message">ถ้าออกตอนนี้อาจหลุดจากห้องหรือเกมที่กำลังเล่นอยู่</p>
+      <div class="confirm-leave-actions">
+        <button type="button" id="confirm-leave-cancel" class="btn btn-ink">อยู่ต่อ</button>
+        <button type="button" id="confirm-leave-ok" class="btn btn-start">ออกเลย</button>
+      </div>
+    </article>
   </div>
 
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>

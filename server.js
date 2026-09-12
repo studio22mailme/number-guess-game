@@ -320,10 +320,21 @@ function beginRoundClock(room) {
   }
 }
 
+function publicBotPapers(room) {
+  return [...room.players.values()]
+    .filter((player) => player.isBot)
+    .map((player) => ({
+      id: player.id,
+      name: player.name,
+      rows: player.rows,
+    }));
+}
+
 function broadcastRoundState(room, type = "waiting") {
   broadcast(room, type, {
     round: room.currentRound + 1,
     players: publicPlayers(room),
+    botPapers: publicBotPapers(room),
     roundEndsAt: room.roundEndsAt,
     endsAt: room.roundEndsAt,
     secondsPerLine: room.secondsPerLine,
@@ -563,6 +574,7 @@ function finishRound(room) {
       round: room.currentRound,
       yourRow: results.find((item) => item.id === player.id)?.row || null,
       submitted: publicPlayers(room),
+      botPapers: publicBotPapers(room),
       winners,
       nextRound: room.currentRound < room.roundLimit ? room.currentRound + 1 : null,
     });
@@ -781,6 +793,7 @@ function startGame(ws) {
     endsAt: room.roundEndsAt,
     secondsPerLine: room.secondsPerLine,
     players: publicPlayers(room),
+    botPapers: publicBotPapers(room),
   });
   broadcastRoomList();
 
@@ -1094,6 +1107,7 @@ async function rejoinRoom(ws, msg) {
       roundEndsAt: room.roundEndsAt,
       endsAt: room.roundEndsAt,
       players: publicPlayers(room),
+      botPapers: publicBotPapers(room),
       yourRows: player.rows,
       pending: Boolean(player.pending),
     });

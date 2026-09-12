@@ -97,9 +97,12 @@
     lobbyAddBotBtn: document.getElementById("lobby-add-bot-btn"),
     lobbyLeaveBtn: document.getElementById("lobby-leave-btn"),
     shareCopyBtn: document.getElementById("share-copy-btn"),
-    shareLineBtn: document.getElementById("share-line-btn"),
-    shareFbBtn: document.getElementById("share-fb-btn"),
-    shareNativeBtn: document.getElementById("share-native-btn"),
+    shareBtn: document.getElementById("share-btn"),
+    confirmLeave: document.getElementById("confirm-leave"),
+    confirmLeaveTitle: document.getElementById("confirm-leave-title"),
+    confirmLeaveMessage: document.getElementById("confirm-leave-message"),
+    confirmLeaveCancel: document.getElementById("confirm-leave-cancel"),
+    confirmLeaveOk: document.getElementById("confirm-leave-ok"),
     gateKicker: document.getElementById("gate-kicker"),
     gateName: document.getElementById("gate-name"),
     gateNote: document.getElementById("gate-note"),
@@ -110,6 +113,7 @@
     playStatus: document.getElementById("play-status"),
     waitFriends: document.getElementById("wait-friends"),
     botStatus: document.getElementById("bot-status"),
+    botPapers: document.getElementById("bot-papers"),
     playError: document.getElementById("play-error"),
     gameTimer: document.getElementById("game-timer"),
     keypad: document.getElementById("keypad"),
@@ -155,6 +159,7 @@
     round: 1,
     waiting: false,
     papers: null,
+    botPapers: [],
     secondsPerLine: DEFAULT_SECONDS_PER_LINE,
     lanAddresses: [],
     port: null,
@@ -303,6 +308,67 @@
     if (els.onlineBadge) {
       els.onlineBadge.hidden = name !== "setup" && name !== "login";
     }
+    syncLeaveGuard();
+  }
+
+  function isInActiveSession() {
+    if (online.code) return true;
+    if (!game) return false;
+    if (game.reviewing) return false;
+    return game.phase === "playing" || game.phase === "waiting-next" || game.phase === "gate";
+  }
+
+  let leaveConfirmResolver = null;
+  let leaveGuardPushed = false;
+  let allowNextUnload = false;
+
+  function closeLeaveConfirm(result) {
+    if (els.confirmLeave) els.confirmLeave.hidden = true;
+    const resolve = leaveConfirmResolver;
+    leaveConfirmResolver = null;
+    if (resolve) resolve(Boolean(result));
+  }
+
+  function askLeaveConfirm(options = {}) {
+    if (!els.confirmLeave) return Promise.resolve(true);
+    if (leaveConfirmResolver) closeLeaveConfirm(false);
+    if (els.confirmLeaveTitle) {
+      els.confirmLeaveTitle.textContent = options.title || "ออกจากหน้านี้?";
+    }
+    if (els.confirmLeaveMessage) {
+      els.confirmLeaveMessage.textContent =
+        options.message || "ถ้าออกตอนนี้อาจหลุดจากห้องหรือเกมที่กำลังเล่นอยู่";
+    }
+    els.confirmLeave.hidden = false;
+    return new Promise((resolve) => {
+      leaveConfirmResolver = resolve;
+    });
+  }
+
+  function syncLeaveGuard() {
+    if (!isInActiveSession()) {
+      leaveGuardPushed = false;
+      return;
+    }
+    if (leaveGuardPushed) return;
+    try {
+      history.pushState({ tualekGuard: true }, "", location.href);
+      leaveGuardPushed = true;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function confirmAndLeave(action, options) {
+    const ok = await askLeaveConfirm(options);
+    if (!ok) {
+      syncLeaveGuard();
+      return false;
+    }
+    allowNextUnload = true;
+    leaveGuardPushed = false;
+    action();
+    return true;
   }
 
   function showSetupError(message) {
@@ -458,9 +524,8 @@
   }
 
   function updateDifficultyUi() {
-    const cfg = difficultyConfig(setup.difficulty);
     if (els.setupTagline) {
-      els.setupTagline.innerHTML = `ทายเลข ${cfg.digitCount} หลักให้ถูกก่อนเพื่อน<br />สนุกได้ทั้งเล่นคนเดียวและแข่งทีม`;
+      els.setupTagline.textContent = "ฝึกสมองสนุกได้ทั้งเล่นคนเดียวและแข่งกับเพื่อน";
     }
     updateTimePreview();
   }
@@ -904,6 +969,55 @@
     if (els.botStatus) els.botStatus.hidden = true;
   }
 
+  function renderBotPapers() {
+    if (!els.botPapers) return;
+    const bots = Array.isArray(online.botPapers) ? online.botPapers : [];
+    const show =
+      game &&
+      game.mode === "online" &&
+      !game.reviewing &&
+      bots.length > 0;
+    if (!show) {
+      els.botPapers.hidden = true;
+      els.botPapers.innerHTML = "";
+      return;
+    }
+
+    const count = game.digitCount;
+    const easy = game.columnFeedback;
+    const rowCount = game.roundLimit || Math.max(...bots.map((b) => (b.rows || []).length), 1);
+
+    els.botPapers.hidden = false;
+    els.botPapers.innerHTML = bots
+      .map((bot) => {
+        const rows = bot.rows || [];
+        const body = Array.from({ length: rowCount }, (_, i) => {
+          const filled = rows[i];
+          const digits = filled
+            ? filled.skipped
+              ? Array(count).fill(null)
+              : filled.guess
+            : Array(count).fill(null);
+          const digitCells = digits
+            .map((digit) => `<td>${digit === null || digit === undefined ? "" : digit}</td>`)
+            .join("");
+          const feedback = filled ? feedbackMarkup(filled, easy) : "";
+          const feedbackClass = filled?.win
+            ? "feedback win"
+            : filled?.skipped
+              ? "feedback skipped"
+              : "feedback";
+          return `<tr><td class="idx">${i + 1}</td>${digitCells}<td class="${feedbackClass}">${feedback}</td></tr>`;
+        }).join("");
+        return `
+          <div class="bot-paper-card">
+            <p class="bot-paper-title">${escapeHtml(bot.name || "บอท")}</p>
+            <table class="bot-mini-paper"><tbody>${body}</tbody></table>
+          </div>`;
+      })
+      .join("");
+  }
+
   function renderWaitFriends(players) {
     const me = meOnlineState(players);
     if (!players || !online.waiting || me?.submitted) {
@@ -934,6 +1048,7 @@
       document.getElementById("quit-btn").hidden = true;
       els.playStatus.textContent = "จบเกมแล้ว · ดูกระดาษของตัวเอง";
       showPlayError("");
+      renderBotPapers();
       return;
     }
 
@@ -963,6 +1078,7 @@
       els.waitFriends.hidden = true;
       if (els.botStatus) els.botStatus.hidden = true;
     }
+    renderBotPapers();
   }
 
   function placeDigit(digit) {
@@ -1250,6 +1366,7 @@
     game = null;
     online.waiting = false;
     online.papers = null;
+    online.botPapers = [];
     screens.result.hidden = true;
     if (currentUser()) {
       showScreen("setup");
@@ -1350,6 +1467,7 @@
     online.you = null;
     online.hostId = null;
     online.players = [];
+    online.botPapers = [];
     online.password = "";
   }
 
@@ -1497,6 +1615,7 @@
         online.difficulty = msg.difficulty || online.difficulty || "normal";
         online.secondsPerLine = msg.secondsPerLine || DEFAULT_SECONDS_PER_LINE;
         online.players = msg.players || [];
+        online.botPapers = Array.isArray(msg.botPapers) ? msg.botPapers : online.botPapers;
         rejoinAttempts = 0;
         online.reconnecting = false;
         saveRoomSession();
@@ -1505,6 +1624,7 @@
             ...msg,
             round: msg.round,
             players: msg.players,
+            botPapers: msg.botPapers,
           });
           if (Array.isArray(msg.yourRows) && game) {
             game.players[0].rows = msg.yourRows;
@@ -1522,6 +1642,7 @@
         break;
       case "waiting":
         online.players = msg.players || [];
+        if (Array.isArray(msg.botPapers)) online.botPapers = msg.botPapers;
         online.round = msg.round;
         {
           const ends = msg.roundEndsAt || msg.endsAt;
@@ -1543,6 +1664,7 @@
         online.you = null;
         online.hostId = null;
         online.players = [];
+        online.botPapers = [];
         clearRoomSession();
         stopGameTimer();
         game = null;
@@ -1566,6 +1688,7 @@
     online.round = msg.round;
     online.waiting = false;
     online.players = msg.players || [];
+    online.botPapers = Array.isArray(msg.botPapers) ? msg.botPapers : [];
     online.papers = null;
     online.difficulty = msg.difficulty || "normal";
     online.secondsPerLine = msg.secondsPerLine || difficultyConfig(online.difficulty).secondsPerLine;
@@ -1592,6 +1715,7 @@
     game.caret = 0;
     online.waiting = false;
     online.players = msg.submitted || [];
+    if (Array.isArray(msg.botPapers)) online.botPapers = msg.botPapers;
     if (msg.nextRound) {
       online.round = msg.nextRound;
       game.phase = "playing";
@@ -1815,14 +1939,52 @@
     input.addEventListener("input", saveSetupSession);
   });
 
-  window.addEventListener("beforeunload", () => {
+  window.addEventListener("beforeunload", (event) => {
     saveSetupSession();
     if (online.code) saveRoomSession();
+    if (allowNextUnload) {
+      allowNextUnload = false;
+      return;
+    }
+    if (!isInActiveSession()) return;
+    event.preventDefault();
+    event.returnValue = "";
   });
   window.addEventListener("pagehide", () => {
     saveSetupSession();
     if (online.code) saveRoomSession();
   });
+  window.addEventListener("popstate", () => {
+    if (!isInActiveSession()) {
+      leaveGuardPushed = false;
+      return;
+    }
+    leaveGuardPushed = false;
+    askLeaveConfirm({
+      title: "ออกจากหน้านี้?",
+      message: "กดกลับจะออกจากห้องหรือเกมที่กำลังเล่นอยู่ ต้องการออกหรือไม่",
+    }).then((ok) => {
+      if (!ok) {
+        syncLeaveGuard();
+        return;
+      }
+      allowNextUnload = true;
+      leaveGuardPushed = false;
+      resetToSetup();
+    });
+  });
+
+  if (els.confirmLeaveCancel) {
+    els.confirmLeaveCancel.addEventListener("click", () => closeLeaveConfirm(false));
+  }
+  if (els.confirmLeaveOk) {
+    els.confirmLeaveOk.addEventListener("click", () => closeLeaveConfirm(true));
+  }
+  if (els.confirmLeave) {
+    els.confirmLeave.addEventListener("click", (event) => {
+      if (event.target === els.confirmLeave) closeLeaveConfirm(false);
+    });
+  }
 
   els.roomList.addEventListener("click", (event) => {
     const btn = event.target.closest("[data-join-code]");
@@ -1898,49 +2060,48 @@
       }
     });
   }
-  if (els.shareLineBtn) {
-    els.shareLineBtn.addEventListener("click", () => {
-      const code = currentShareCode();
-      if (!code) return;
-      window.open(
-        `https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(roomShareUrl(code))}`,
-        "_blank",
-        "noopener,noreferrer"
-      );
-    });
-  }
-  if (els.shareFbBtn) {
-    els.shareFbBtn.addEventListener("click", () => {
-      const code = currentShareCode();
-      if (!code) return;
-      window.open(
-        `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(roomShareUrl(code))}`,
-        "_blank",
-        "noopener,noreferrer"
-      );
-    });
-  }
-  if (els.shareNativeBtn) {
-    els.shareNativeBtn.addEventListener("click", async () => {
+
+  if (els.shareBtn) {
+    els.shareBtn.addEventListener("click", async () => {
       const code = currentShareCode();
       if (!code) return;
       const url = roomShareUrl(code);
       if (navigator.share) {
         try {
           await navigator.share({ title: "เกมท้ายตัวเลข", text: shareText(code), url });
-        } catch {
-          /* cancelled */
+          return;
+        } catch (err) {
+          if (err && err.name === "AbortError") return;
         }
-      } else {
-        window.open(url, "_blank", "noopener,noreferrer");
+      }
+      try {
+        await navigator.clipboard.writeText(url);
+        showLobbyError("");
+        const label = els.shareBtn.querySelector(".share-label");
+        if (label) {
+          label.textContent = "คัดลอกแล้ว";
+          window.setTimeout(() => {
+            label.textContent = "แชร์";
+          }, 1200);
+        }
+      } catch {
+        showLobbyError("คัดลอกลิงก์ไม่สำเร็จ");
       }
     });
   }
 
   els.lobbyLeaveBtn.addEventListener("click", () => {
-    leaveOnlineRoom();
-    showScreen("setup");
-    sendSocket({ type: "watchRooms" });
+    confirmAndLeave(
+      () => {
+        leaveOnlineRoom();
+        showScreen("setup");
+        sendSocket({ type: "watchRooms" });
+      },
+      {
+        title: "ออกจากห้อง?",
+        message: "ต้องการออกจากห้องนี้ใช่ไหม",
+      }
+    );
   });
 
   els.readyBtn.addEventListener("click", () => {
@@ -1980,7 +2141,12 @@
   document.getElementById("home-btn").addEventListener("click", resetToSetup);
   document.getElementById("review-again-btn").addEventListener("click", replaySameSettings);
   document.getElementById("review-home-btn").addEventListener("click", resetToSetup);
-  document.getElementById("quit-btn").addEventListener("click", resetToSetup);
+  document.getElementById("quit-btn").addEventListener("click", () => {
+    confirmAndLeave(resetToSetup, {
+      title: "ออกจากเกม?",
+      message: "ต้องการออกจากเกมนี้ใช่ไหม",
+    });
+  });
 
   screens.play.addEventListener("pointerdown", () => {
     signalHumanActivity();

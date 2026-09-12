@@ -320,8 +320,131 @@ html[data-age-theme="senior"] .dot-grid {
 }
 
 .share-row .btn {
-  min-height: 44px;
-  font-size: 0.95rem;
+  min-height: 48px;
+  font-size: 1.02rem;
+}
+
+.share-row .share-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.share-icon {
+  flex: 0 0 auto;
+}
+
+.confirm-leave {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(27, 51, 88, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 40;
+}
+
+.confirm-leave[hidden] {
+  display: none !important;
+}
+
+.confirm-leave-card {
+  width: min(380px, 100%);
+  background: var(--paper);
+  border: 3px solid var(--line);
+  border-radius: calc(var(--radius) + 6px);
+  box-shadow: var(--shadow);
+  text-align: center;
+  padding: 28px 22px 22px;
+  animation: pop-in 0.3s cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+.confirm-leave-card h2 {
+  font-family: "Mitr", "Prompt", sans-serif;
+  font-size: 1.55rem;
+  color: var(--heading);
+  margin: 0 0 8px;
+}
+
+.confirm-leave-message {
+  color: var(--muted);
+  margin: 0 0 20px;
+  line-height: 1.45;
+}
+
+.confirm-leave-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.bot-papers {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  width: 100%;
+}
+
+.bot-paper-card {
+  border: 2px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.72);
+  padding: 8px 10px 10px;
+}
+
+.bot-paper-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--heading);
+  margin-bottom: 6px;
+}
+
+.bot-mini-paper {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.78rem;
+}
+
+.bot-mini-paper td {
+  border: 1px solid rgba(43, 58, 92, 0.28);
+  text-align: center;
+  padding: 2px 1px;
+  height: 22px;
+  font-weight: 700;
+  background: #fffef9;
+}
+
+.bot-mini-paper td.idx {
+  width: 1.2rem;
+  font-size: 0.68rem;
+  background: #e7f8ff;
+}
+
+.bot-mini-paper td.feedback {
+  width: 38%;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-align: left;
+  padding-left: 3px;
+}
+
+.bot-mini-paper .peg {
+  width: 7px;
+  height: 7px;
+}
+
+.bot-mini-paper .mark-star {
+  font-size: 0.7rem;
+}
+
+.bot-mini-empty {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
 .ready-toggle-btn,
