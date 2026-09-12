@@ -111,14 +111,29 @@
   }
 
   function loginDemo(name) {
+    const DEMO_KEY = "tualek-demo-uid";
+    let uid = null;
+    try {
+      uid = localStorage.getItem(DEMO_KEY);
+    } catch {
+      uid = null;
+    }
+    if (!uid) {
+      uid = `demo_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+      try {
+        localStorage.setItem(DEMO_KEY, uid);
+      } catch {
+        /* ignore */
+      }
+    }
     const displayName = String(name || "ผู้เล่นทดลอง").trim().slice(0, 20) || "ผู้เล่นทดลอง";
     Auth.demo = true;
     Auth.user = {
-      uid: `demo_${Date.now().toString(36)}`,
+      uid,
       displayName,
       photoURL: "",
       email: "",
-      getIdToken: async () => `demo:${displayName}:${Auth.user.uid}`,
+      getIdToken: async () => `demo:${displayName}:${uid}`,
     };
     window.dispatchEvent(new CustomEvent("auth-changed", { detail: { user: Auth.user } }));
     return Auth.user;

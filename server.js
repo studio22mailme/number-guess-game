@@ -931,34 +931,31 @@ function leaveCurrent(ws, { intentional = true } = {}) {
       return;
     }
 
-    // ล็อบบี้: หลุด = ออกทันที · โอนหัวห้องถ้าจำเป็น
-    if (room.status === "lobby") {
-      ws.roomCode = null;
-      ws.playerId = null;
-      removePlayerFromRoom(room, playerId);
-      broadcastRoomList();
-      return;
-    }
-
-    // ระหว่างเกม: ไม่มีบอทเล่นแทน · รอ timeout แถวว่าง หรือครบ 90 วิแล้วเอาออก
+    // หลุดชั่วคราว (รีเฟรช/เน็ตสะดุด) · เก็บที่นั่งไว้ให้กลับเข้า
     player.ws = null;
     player.connected = false;
     player.disconnectAt = Date.now();
     const staleId = playerId;
     const staleCode = code;
+    const graceMs = room.status === "lobby" ? 45_000 : 90_000;
     setTimeout(() => {
       const current = rooms.get(staleCode);
       if (!current) return;
       const stale = current.players.get(staleId);
       if (!stale || stale.ws || stale.isBot) return;
       removePlayerFromRoom(current, staleId);
-    }, 90_000);
+    }, graceMs);
     ws.roomCode = null;
     ws.playerId = null;
-    if (room.hostId === playerId) transferHost(room);
-    broadcastRoundState(room, "waiting");
-    if ([...room.players.values()].every((item) => item.pending)) {
-      finishRound(room);
+
+    if (room.status === "lobby") {
+      broadcast(room, "lobby", lobbyPayload(room));
+      broadcastRoomList();
+    } else if (room.status === "playing") {
+      broadcastRoundState(room, "waiting");
+      if ([...room.players.values()].every((item) => item.pending)) {
+        finishRound(room);
+      }
     }
     return;
   }
@@ -1025,8 +1022,16 @@ async function rejoinRoom(ws, msg) {
   }
 
   let player = [...room.players.values()].find((item) => item.uid && item.uid === auth.uid);
+  if (!player && msg.playerId) {
+    const byId = room.players.get(String(msg.playerId));
+    if (byId && !byId.isBot && (!byId.uid || byId.uid === auth.uid)) {
+      player = byId;
+    }
+  }
+
+  if (player && player.isBot) player = null;
+
   if (!player) {
-    // ยังอยู่ในล็อบบี้ ให้เข้าใหม่ตามปกติ
     if (room.status === "lobby") {
       await joinRoom(ws, msg);
       return;
@@ -1034,6 +1039,15 @@ async function rejoinRoom(ws, msg) {
     send(ws, "error", { message: "ไม่พบที่นั่งเดิมในห้องนี้" });
     return;
   }
+
+  if (player.uid && player.uid !== auth.uid) {
+    send(ws, "error", { message: "ไม่พบที่นั่งเดิมในห้องนี้" });
+    return;
+  }
+
+  // อัปเดตชื่อ/uid ถ้ากลับเข้ามา
+  if (auth.uid) player.uid = auth.uid;
+  if (msg.name) player.name = String(msg.name).trim().slice(0, 20) || player.name;
 
   leaveCurrent(ws, { intentional: true });
   if (player.ws && player.ws !== ws) {

@@ -164,17 +164,20 @@
   };
 
   const ROOM_SESSION_KEY = "tualek-room-session";
+  const SETUP_SESSION_KEY = "tualek-setup-session";
 
   function saveRoomSession(extra = {}) {
     if (!online.code) return;
     try {
-      sessionStorage.setItem(
+      localStorage.setItem(
         ROOM_SESSION_KEY,
         JSON.stringify({
           code: online.code,
+          playerId: online.you?.id || null,
           name: online.you?.name || els.onlineNameInput?.value || "ผู้เล่น",
           password: online.password || "",
           difficulty: online.difficulty || "normal",
+          savedAt: Date.now(),
           ...extra,
         })
       );
@@ -185,6 +188,7 @@
 
   function clearRoomSession() {
     try {
+      localStorage.removeItem(ROOM_SESSION_KEY);
       sessionStorage.removeItem(ROOM_SESSION_KEY);
     } catch {
       /* ignore */
@@ -193,10 +197,75 @@
 
   function readRoomSession() {
     try {
-      const raw = sessionStorage.getItem(ROOM_SESSION_KEY);
-      return raw ? JSON.parse(raw) : null;
+      const raw = localStorage.getItem(ROOM_SESSION_KEY) || sessionStorage.getItem(ROOM_SESSION_KEY);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      // เก่าเกิน 6 ชม. ไม่ใช้
+      if (data.savedAt && Date.now() - data.savedAt > 6 * 60 * 60 * 1000) {
+        clearRoomSession();
+        return null;
+      }
+      return data;
     } catch {
       return null;
+    }
+  }
+
+  function saveSetupSession() {
+    try {
+      localStorage.setItem(
+        SETUP_SESSION_KEY,
+        JSON.stringify({
+          mode: setup.mode,
+          difficulty: setup.difficulty,
+          allowRepeat: setup.allowRepeat,
+          limitRounds: setup.limitRounds,
+          names: setup.names,
+          rounds: els.roundsInput?.value || "10",
+          onlineName: els.onlineNameInput?.value || "",
+          roomTitle: els.roomTitleInput?.value || "",
+          roomCode: els.roomCodeInput?.value || "",
+          savedAt: Date.now(),
+        })
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function restoreSetupSession() {
+    try {
+      const raw = localStorage.getItem(SETUP_SESSION_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (!data || typeof data !== "object") return;
+
+      if (data.mode) {
+        setup.mode = data.mode;
+        setChoiceGroup("[data-mode]", "mode", setup.mode);
+      }
+      if (data.difficulty) {
+        setup.difficulty = data.difficulty;
+        setChoiceGroup("[data-difficulty]", "difficulty", setup.difficulty);
+      }
+      if (typeof data.allowRepeat === "boolean") {
+        setup.allowRepeat = data.allowRepeat;
+        setChoiceGroup("[data-repeat]", "repeat", data.allowRepeat ? "yes" : "no");
+      }
+      if (typeof data.limitRounds === "boolean") {
+        setup.limitRounds = data.limitRounds;
+        setChoiceGroup("[data-limit]", "limit", data.limitRounds ? "yes" : "no");
+      }
+      if (Array.isArray(data.names)) {
+        setup.names = data.names.filter((name) => typeof name === "string").slice(0, MAX_PLAYERS);
+        renderPlayerList();
+      }
+      if (els.roundsInput && data.rounds) els.roundsInput.value = data.rounds;
+      if (els.onlineNameInput && data.onlineName) els.onlineNameInput.value = data.onlineName;
+      if (els.roomTitleInput && data.roomTitle) els.roomTitleInput.value = data.roomTitle;
+      if (els.roomCodeInput && data.roomCode) els.roomCodeInput.value = data.roomCode;
+    } catch {
+      /* ignore */
     }
   }
 
@@ -218,6 +287,7 @@
         code: session.code,
         name: session.name,
         password: session.password || "",
+        playerId: session.playerId || null,
       });
     } catch (error) {
       console.error(error);
@@ -1391,6 +1461,10 @@
           /ไม่พบที่นั่ง|หมดอายุ|ปิดแล้ว|ไม่พบห้อง/.test(String(msg.message || ""))
         ) {
           clearRoomSession();
+          if (!screens.setup || screens.setup.hidden) {
+            showScreen("setup");
+            updateSetupVisibility();
+          }
         }
         if (!screens.lobby.hidden) showLobbyError(msg.message);
         else if (!screens.play.hidden) {
@@ -1618,6 +1692,9 @@
       const userBar = document.querySelector(".user-bar");
       if (userBar) userBar.hidden = false;
     }
+
+    restoreSetupSession();
+
     const roomParam = new URLSearchParams(location.search).get("room");
     if (roomParam) {
       setup.mode = "online";
@@ -1626,15 +1703,36 @@
         els.roomCodeInput.value = roomParam.trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
       }
     }
-    showScreen("setup");
+
+    const session = readRoomSession();
+    if (session?.code) {
+      showScreen("lobby");
+      els.lobbyTitle.textContent = "กำลังกลับเข้าห้อง…";
+      els.lobbyCode.textContent = session.code;
+      els.lobbySettings.textContent = "รีเฟรชแล้ว · กำลังเชื่อมต่อห้องล่าสุด";
+      if (els.lobbyPlayers) {
+        els.lobbyPlayers.innerHTML = `<li class="empty-players">กำลังกลับเข้าห้อง ${escapeHtml(session.code)}…</li>`;
+      }
+      if (els.lobbyStartBtn) els.lobbyStartBtn.hidden = true;
+      if (els.lobbyAddBotBtn) els.lobbyAddBotBtn.hidden = true;
+    } else {
+      showScreen("setup");
+    }
+
     updateSetupVisibility();
+    updateDifficultyUi();
     refreshOnlineCount();
-    ensureSocket().catch(() => {});
+    ensureSocket()
+      .then(() => {
+        if (session?.code) attemptAutoRejoin();
+      })
+      .catch(() => {});
     if (window.TualekMusic?.start) window.TualekMusic.start().catch(() => {});
     if (!setup.names.length && currentUser()?.displayName) {
       setup.names = [currentUser().displayName];
       renderPlayerList();
     }
+    saveSetupSession();
   }
 
   function showLoginScreen() {
@@ -1653,6 +1751,7 @@
       setChoiceGroup("[data-mode]", "mode", setup.mode);
       updateSetupVisibility();
       showSetupError("");
+      saveSetupSession();
     });
   });
 
@@ -1662,6 +1761,7 @@
       setChoiceGroup("[data-difficulty]", "difficulty", setup.difficulty);
       updateDifficultyUi();
       showSetupError("");
+      saveSetupSession();
     });
   });
 
@@ -1669,6 +1769,7 @@
     btn.addEventListener("click", () => {
       setup.allowRepeat = btn.dataset.repeat === "yes";
       setChoiceGroup("[data-repeat]", "repeat", btn.dataset.repeat);
+      saveSetupSession();
     });
   });
 
@@ -1677,13 +1778,23 @@
       setup.limitRounds = btn.dataset.limit === "yes";
       setChoiceGroup("[data-limit]", "limit", btn.dataset.limit);
       updateSetupVisibility();
+      saveSetupSession();
     });
   });
 
-  els.roundsInput.addEventListener("input", updateTimePreview);
-  els.addPlayerBtn.addEventListener("click", addPlayerName);
+  els.roundsInput.addEventListener("input", () => {
+    updateTimePreview();
+    saveSetupSession();
+  });
+  els.addPlayerBtn.addEventListener("click", () => {
+    addPlayerName();
+    saveSetupSession();
+  });
   els.playerNameInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") addPlayerName();
+    if (event.key === "Enter") {
+      addPlayerName();
+      saveSetupSession();
+    }
   });
 
   els.playerList.addEventListener("click", (event) => {
@@ -1691,10 +1802,26 @@
     if (!btn) return;
     setup.names.splice(Number(btn.dataset.remove), 1);
     renderPlayerList();
+    saveSetupSession();
   });
 
   els.roomCodeInput.addEventListener("input", () => {
     els.roomCodeInput.value = els.roomCodeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    saveSetupSession();
+  });
+
+  [els.onlineNameInput, els.roomTitleInput].forEach((input) => {
+    if (!input) return;
+    input.addEventListener("input", saveSetupSession);
+  });
+
+  window.addEventListener("beforeunload", () => {
+    saveSetupSession();
+    if (online.code) saveRoomSession();
+  });
+  window.addEventListener("pagehide", () => {
+    saveSetupSession();
+    if (online.code) saveRoomSession();
   });
 
   els.roomList.addEventListener("click", (event) => {
