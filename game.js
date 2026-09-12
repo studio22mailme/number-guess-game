@@ -11,7 +11,6 @@
       secondsPerLine: 120,
       columnFeedback: true,
       timeoutEnds: false,
-      allowBot: true,
       hint: "ง่าย · เลข 4 หลัก · สัญลักษณ์ตรงคอลัมน์ตัวเลข",
     },
     normal: {
@@ -21,7 +20,6 @@
       secondsPerLine: 120,
       columnFeedback: false,
       timeoutEnds: false,
-      allowBot: true,
       hint: "ปกติ · เลข 4 หลัก · สัญลักษณ์รวมด้านขวา",
     },
     hard: {
@@ -31,8 +29,7 @@
       secondsPerLine: 120,
       columnFeedback: false,
       timeoutEnds: false,
-      allowBot: true,
-      hint: "ยาก · เลข 5 หลัก · ไม่ส่งทัน Bot เล่นแทน",
+      hint: "ยาก · เลข 5 หลัก",
     },
     extreme: {
       id: "extreme",
@@ -41,7 +38,6 @@
       secondsPerLine: 30,
       columnFeedback: false,
       timeoutEnds: true,
-      allowBot: true,
       hint: "ยากมาก · เลข 5 หลัก · ตอบใน 30 วินาที/รอบ",
     },
   };
@@ -95,12 +91,15 @@
     lobbyTitle: document.getElementById("lobby-title"),
     lobbyCode: document.getElementById("lobby-code"),
     lobbySettings: document.getElementById("lobby-settings"),
-    lobbyLink: document.getElementById("lobby-link"),
     lobbyPlayers: document.getElementById("lobby-players"),
     lobbyError: document.getElementById("lobby-error"),
     lobbyStartBtn: document.getElementById("lobby-start-btn"),
-    lobbyReadyBtn: document.getElementById("lobby-ready-btn"),
+    lobbyAddBotBtn: document.getElementById("lobby-add-bot-btn"),
     lobbyLeaveBtn: document.getElementById("lobby-leave-btn"),
+    shareCopyBtn: document.getElementById("share-copy-btn"),
+    shareLineBtn: document.getElementById("share-line-btn"),
+    shareFbBtn: document.getElementById("share-fb-btn"),
+    shareNativeBtn: document.getElementById("share-native-btn"),
     gateKicker: document.getElementById("gate-kicker"),
     gateName: document.getElementById("gate-name"),
     gateNote: document.getElementById("gate-note"),
@@ -335,6 +334,9 @@
   }
 
   function feedbackMarkup(row, easy = false) {
+    if (row?.skipped) {
+      return `<span class="feedback-pegs feedback-skipped">ว่าง</span>`;
+    }
     const count = row.guess?.length || digitCount();
     if (easy && Array.isArray(row.marks)) {
       return `<span class="feedback-pegs">${row.marks.map((kind) => markIcon(kind)).join("")}</span>`;
@@ -390,9 +392,6 @@
     if (els.setupTagline) {
       els.setupTagline.innerHTML = `ทายเลข ${cfg.digitCount} หลักให้ถูกก่อนเพื่อน<br />สนุกได้ทั้งเล่นคนเดียวและแข่งทีม`;
     }
-    if (els.onlineHint) {
-      els.onlineHint.textContent = `แต่ละบรรทัดมี ${cfg.secondsPerLine === 120 ? "2 นาที" : `${cfg.secondsPerLine} วินาที`} · ส่งได้เลยไม่รอเพื่อน · ไม่ส่งทันหรือหลุด Bot เล่นแทน`;
-    }
     updateTimePreview();
   }
 
@@ -402,6 +401,18 @@
     return "คนเดียว";
   }
 
+  function formatRoomSettings(room) {
+    const bits = [
+      difficultyLabel(room.difficulty),
+      `${room.digitCount || 4} หลัก`,
+      room.allowRepeat ? "ซ้ำได้" : "ไม่ซ้ำ",
+      `${room.roundLimit} บรรทัด`,
+      `รอบละ ${room.secondsPerLine || DEFAULT_SECONDS_PER_LINE} วิ`,
+    ];
+    if (room.hasPassword) bits.unshift("มีรหัสผ่าน");
+    return bits.join(" · ");
+  }
+
   function updateTimePreview() {
     if (setup.mode !== "online") {
       els.timePreview.hidden = true;
@@ -409,11 +420,7 @@
     }
     const cfg = difficultyConfig(setup.difficulty);
     els.timePreview.hidden = false;
-    if (cfg.secondsPerLine <= 30) {
-      els.timePreview.textContent = `ยากมาก · ตอบภายใน ${cfg.secondsPerLine} วินาทีต่อบรรทัด · ไม่ทันหรือหลุด Bot เล่นแทน`;
-    } else {
-      els.timePreview.textContent = `แต่ละบรรทัดมีเวลา ${cfg.secondsPerLine === 120 ? "2 นาที" : `${cfg.secondsPerLine} วินาที`} · ไม่ทันหรือหลุด Bot เล่นแทน`;
-    }
+    els.timePreview.textContent = `แต่ละบรรทัด ${cfg.secondsPerLine === 120 ? "2 นาที" : `${cfg.secondsPerLine} วินาที`} · ไม่ส่งทัน = แถวว่าง ไปรอบถัดไป`;
   }
 
   function updateSetupVisibility() {
@@ -423,24 +430,19 @@
     els.playersField.hidden = !isMulti;
     els.onlineField.hidden = !isOnline;
     els.repeatField.hidden = false;
+    els.limitChoices.hidden = false;
+    els.roundsRow.hidden = !setup.limitRounds;
+    els.roundsLabel.textContent = "จำกัดจำนวนรอบไหม";
+    els.roundsInputLabel.textContent = "กี่รอบ";
+    els.roundsSuffix.textContent = isOnline ? "บรรทัด" : "รอบต่อคน";
 
     if (isOnline) {
-      els.limitChoices.hidden = true;
-      els.roundsRow.hidden = false;
-      els.roundsLabel.textContent = "จำนวนบรรทัด (บังคับ)";
-      els.roundsInputLabel.textContent = "กี่บรรทัด";
-      els.roundsSuffix.textContent = "บรรทัด";
       els.startBtn.textContent = "เข้าห้อง / สร้างห้อง";
       updateTimePreview();
       ensureSocket()
         .then(() => sendSocket({ type: "watchRooms" }))
         .catch(() => {});
     } else {
-      els.limitChoices.hidden = false;
-      els.roundsRow.hidden = !setup.limitRounds;
-      els.roundsLabel.textContent = "จำกัดจำนวนรอบไหม";
-      els.roundsInputLabel.textContent = "กี่รอบ";
-      els.roundsSuffix.textContent = "รอบต่อคน";
       els.timePreview.hidden = true;
       els.startBtn.textContent = "เริ่มเกม";
     }
@@ -495,7 +497,7 @@
         <li class="room-item">
           <div class="room-main">
             <strong>${escapeHtml(room.roomName || "ห้อง")}</strong>
-            <span class="room-meta">รหัส ${escapeHtml(room.code)} · ${difficultyLabel(room.difficulty)} · ${room.digitCount || 4} หลัก · ${room.playerCount}/${room.maxPlayers || MAX_PLAYERS} คน${room.hasPassword ? " · มีรหัสผ่าน" : ""}</span>
+            <span class="room-meta">รหัส ${escapeHtml(room.code)} · ${escapeHtml(formatRoomSettings(room))} · ${room.playerCount}/${room.maxPlayers || MAX_PLAYERS} คน</span>
           </div>
           <button type="button" class="btn btn-ink room-join-btn" data-join-code="${escapeHtml(room.code)}" data-locked="${room.hasPassword ? "1" : "0"}">เข้า</button>
         </li>`
@@ -581,13 +583,18 @@
       const roomName = els.roomTitleInput.value.trim().slice(0, 24);
       const password = els.roomPasswordInput.value;
       const joinPassword = els.joinPasswordInput.value;
-      const rounds = Number(els.roundsInput.value);
+
+      let roundLimit = MAX_ROUNDS;
+      if (setup.limitRounds) {
+        const rounds = Number(els.roundsInput.value);
+        if (!Number.isInteger(rounds) || rounds < 1 || rounds > MAX_ROUNDS) {
+          return { error: `จำนวนรอบต้องเป็นเลข 1–${MAX_ROUNDS}` };
+        }
+        roundLimit = rounds;
+      }
 
       if (!name) {
         return { error: "กรุณาใส่ชื่อของคุณในห้อง" };
-      }
-      if (!Number.isInteger(rounds) || rounds < 1 || rounds > MAX_ROUNDS) {
-        return { error: `จำนวนบรรทัดต้องเป็นเลข 1–${MAX_ROUNDS}` };
       }
 
       if (code) {
@@ -597,7 +604,7 @@
           name,
           code,
           password: joinPassword,
-          roundLimit: rounds,
+          roundLimit,
           allowRepeat: setup.allowRepeat,
           difficulty: setup.difficulty,
         };
@@ -610,7 +617,7 @@
         roomName: roomName || `${name} ห้อง`,
         password,
         allowRepeat: setup.allowRepeat,
-        roundLimit: rounds,
+        roundLimit,
         difficulty: setup.difficulty,
       };
     }
@@ -690,7 +697,9 @@
       const isPendingRow =
         game.mode === "online" && online.waiting && i === player.rows.length && !filled;
       const digits = filled
-        ? filled.guess
+        ? filled.skipped
+          ? Array(count).fill(null)
+          : filled.guess
         : isDraftRow || isPendingRow
           ? game.draft
           : Array(count).fill(null);
@@ -699,7 +708,7 @@
         : isPendingRow
           ? "รอ…"
           : "";
-      const feedbackClass = filled?.win ? "feedback win" : "feedback";
+      const feedbackClass = filled?.win ? "feedback win" : filled?.skipped ? "feedback skipped" : "feedback";
 
       const digitCells = digits
         .map((digit, digitIndex) => {
@@ -779,10 +788,40 @@
     if (game.phase !== "playing" || game.reviewing) return;
     startGameTimer(Date.now() + game.secondsPerLine * 1000, () => {
       if (!game || game.phase !== "playing" || game.mode === "online") return;
-      game.phase = "over";
-      game.timeoutLost = true;
+      const player = currentPlayer();
+      const count = digitCount();
+      player.rows.push({
+        guess: Array(count).fill(null),
+        blacks: 0,
+        whites: 0,
+        win: false,
+        none: true,
+        skipped: true,
+      });
+      game.draft = emptyDraft();
+      game.caret = 0;
+      if (game.mode === "solo") {
+        if (!playerHasRounds(player)) {
+          game.phase = "over";
+          renderPlay();
+          window.setTimeout(() => showResult(), 450);
+          return;
+        }
+        renderPlay();
+        startLocalRoundTimer();
+        return;
+      }
+      game.phase = "waiting-next";
       renderPlay();
-      showResult({ reason: "timeout", local: true });
+      const nxt = nextPlayerIndex(game.currentIndex);
+      if (nxt === null) {
+        game.phase = "over";
+        els.afterTurn.hidden = true;
+        window.setTimeout(() => showResult(), 450);
+        return;
+      }
+      els.afterTurn.hidden = false;
+      startHandoffCountdown();
     });
   }
 
@@ -791,68 +830,29 @@
     return players.find((player) => player.id === online.you.id) || null;
   }
 
-  function renderBotStatus(players) {
-    if (!els.botStatus) return;
-    if (game?.mode !== "online" || game.phase !== "playing" || game.reviewing) {
-      els.botStatus.hidden = true;
-      return;
-    }
-    const botPlayers = (players || []).filter((player) => player.botMode);
-    if (!botPlayers.length) {
-      els.botStatus.hidden = true;
-      return;
-    }
-    els.botStatus.hidden = false;
-    const names = botPlayers.map((player) => player.name).join(", ");
-    els.botStatus.textContent =
-      botPlayers.length === 1
-        ? `${names} กำลังให้ Bot เล่นแทน`
-        : `Bot กำลังเล่นแทน: ${names}`;
+  function renderBotStatus() {
+    if (els.botStatus) els.botStatus.hidden = true;
   }
 
   function renderWaitFriends(players) {
     const me = meOnlineState(players);
-    if (!players || (!online.waiting && !me?.botMode)) {
+    if (!players || !online.waiting || me?.submitted) {
+      // ซ่อนข้อความรอเพื่อน / รอหมดเวลา
       els.waitFriends.hidden = true;
-      return;
-    }
-    els.waitFriends.hidden = false;
-    if (me?.botMode) {
-      els.waitFriends.textContent = me.submitted
-        ? "Bot เล่นแทนอยู่ · แตะหน้าจอเพื่อกลับมาเล่นเอง"
-        : "Bot พร้อมเล่นแทน · แตะหน้าจอเพื่อเล่นเอง";
-      return;
-    }
-    if (online.waiting) {
-      els.waitFriends.textContent = "ส่งแล้ว · รอหมดเวลารอบนี้เพื่อตรวจคำตอบ (ไม่ต้องรอเพื่อน)";
       return;
     }
     els.waitFriends.hidden = true;
   }
 
   function signalHumanActivity() {
-    if (!game || game.mode !== "online" || game.phase !== "playing" || game.reviewing) return;
-    const me = meOnlineState(online.players);
-    if (!me?.botMode && !me?.fromBot) return;
-    online.players = (online.players || []).map((player) =>
-      player.id === online.you?.id
-        ? { ...player, botMode: false, submitted: false, fromBot: false }
-        : player
-    );
-    online.waiting = false;
-    try {
-      sendSocket({ type: "resume" });
-    } catch {
-      /* ignore */
-    }
+    /* no substitute-bot resume */
   }
 
   function renderPlay() {
     const player = game.reviewing ? game.players[game.reviewIndex] : currentPlayer();
     const me = meOnlineState(online.players);
-    const blockedByBot = game.mode === "online" && Boolean(me?.botMode && me?.submitted);
     const interactive =
-      !game.reviewing && game.phase === "playing" && !online.waiting && !blockedByBot;
+      !game.reviewing && game.phase === "playing" && !online.waiting;
     renderPaper(player, interactive);
 
     if (game.reviewing) {
@@ -860,6 +860,7 @@
       els.afterTurn.hidden = true;
       els.reviewBar.hidden = false;
       els.waitFriends.hidden = true;
+      if (els.botStatus) els.botStatus.hidden = true;
       document.getElementById("quit-btn").hidden = true;
       els.playStatus.textContent = "จบเกมแล้ว · ดูกระดาษของตัวเอง";
       showPlayError("");
@@ -868,7 +869,7 @@
 
     document.getElementById("quit-btn").hidden = false;
     els.reviewBar.hidden = true;
-    els.keypad.hidden = game.phase !== "playing" || online.waiting || blockedByBot;
+    els.keypad.hidden = game.phase !== "playing" || online.waiting;
     els.afterTurn.hidden = game.phase !== "waiting-next";
 
     if (game.phase === "playing") {
@@ -887,7 +888,7 @@
 
     if (game.mode === "online") {
       renderWaitFriends(online.players);
-      renderBotStatus(online.players);
+      renderBotStatus();
     } else {
       els.waitFriends.hidden = true;
       if (els.botStatus) els.botStatus.hidden = true;
@@ -897,8 +898,6 @@
   function placeDigit(digit) {
     signalHumanActivity();
     if (!game || game.phase !== "playing" || game.reviewing || online.waiting) return;
-    const me = meOnlineState(online.players);
-    if (me?.botMode && me?.submitted) return;
     showPlayError("");
     if (!game.allowRepeat) {
       const duplicate = game.draft.some((value, index) => value === digit && index !== game.caret);
@@ -917,8 +916,6 @@
   function backspace() {
     signalHumanActivity();
     if (!game || game.phase !== "playing" || game.reviewing || online.waiting) return;
-    const me = meOnlineState(online.players);
-    if (me?.botMode && me?.submitted) return;
     showPlayError("");
     if (game.draft[game.caret] !== null) game.draft[game.caret] = null;
     else if (game.caret > 0) {
@@ -931,8 +928,6 @@
   function submitGuess() {
     signalHumanActivity();
     if (!game || game.phase !== "playing" || game.reviewing || online.waiting) return;
-    const me = meOnlineState(online.players);
-    if (me?.botMode && me?.submitted) return;
     showPlayError("");
     if (game.draft.some((digit) => digit === null)) {
       showPlayError(`ต้องกรอกตัวเลข ${digitCount()} หลักทุกครั้ง`);
@@ -1288,50 +1283,74 @@
     online.password = "";
   }
 
+  function roomShareUrl(code) {
+    const url = new URL(location.href);
+    url.searchParams.set("room", code);
+    return url.toString();
+  }
+
+  function shareText(code) {
+    return `มาร่วมเล่นเกมท้ายตัวเลขห้อง ${code} ได้ที่ ${roomShareUrl(code)}`;
+  }
+
   function renderLobby(payload) {
     online.code = payload.code;
     online.roomName = payload.roomName || "";
     online.players = payload.players || [];
     online.hostId = payload.hostId || online.hostId || null;
+    online.secondsPerLine = payload.secondsPerLine || online.secondsPerLine;
     els.lobbyTitle.textContent = payload.roomName || "ห้องรอเพื่อน";
     els.lobbyCode.textContent = payload.code;
-    els.lobbySettings.textContent = `${payload.hasPassword ? "มีรหัสผ่าน · " : ""}${difficultyLabel(payload.difficulty)} · ${payload.allowRepeat ? "ซ้ำได้" : "ไม่ซ้ำ"} · ${payload.roundLimit} บรรทัด · ${payload.digitCount || 4} หลัก · เวลารอบ ${online.secondsPerLine || payload.secondsPerLine || DEFAULT_SECONDS_PER_LINE} วินาที`;
-    els.lobbyLink.textContent = `ลิงก์นี้: ${location.origin} · ให้เพื่อนล็อกอินแล้วเข้าร่วมด้วยรหัส ${payload.code}`;
+    els.lobbySettings.textContent = formatRoomSettings(payload);
 
     const isHost = online.you?.id === payload.hostId;
     const me = meOnlineState(online.players);
     const allReady =
       online.players.length >= 2 &&
-      online.players.every((player) => player.ready || player.isHost);
-    const waitingNames = online.players.filter((player) => !player.ready).map((player) => player.name);
+      online.players.every((player) => player.ready || player.isHost || player.isBot);
+    const waitingNames = online.players
+      .filter((player) => !player.isBot && !player.isHost && !player.ready)
+      .map((player) => player.name);
 
     els.lobbyPlayers.innerHTML = online.players
       .map((player) => {
-        const readyClass = player.ready || player.isHost ? "is-ready" : "is-wait";
-        const readyText = player.isHost ? "หัวห้อง" : player.ready ? "พร้อม" : "รอพร้อม";
-        const kick =
-          isHost && !player.isHost && !player.ready
-            ? `<button type="button" class="btn btn-ink kick-btn" data-kick-id="${escapeHtml(player.id)}">เตะ</button>`
-            : "";
+        const readyClass = player.ready || player.isHost || player.isBot ? "is-ready" : "is-wait";
+        let readyText = "รอพร้อม";
+        if (player.isBot) readyText = "บอท";
+        else if (player.isHost) readyText = "หัวห้อง";
+        else if (player.ready) readyText = "พร้อม";
+
+        const actions = [];
+        if (!player.isHost && !player.isBot && online.you?.id === player.id) {
+          const ready = Boolean(player.ready);
+          actions.push(
+            `<button type="button" class="btn btn-ink ready-toggle-btn" data-ready-toggle="${ready ? "0" : "1"}">${
+              ready ? "ยกเลิกพร้อม" : "กดพร้อม"
+            }</button>`
+          );
+        }
+        if (isHost && !player.isHost && (player.isBot || !player.ready)) {
+          actions.push(
+            `<button type="button" class="btn btn-ink kick-btn" data-kick-id="${escapeHtml(player.id)}">เตะ</button>`
+          );
+        }
         return `
         <li class="player-item">
-          <span>${escapeHtml(player.name)}${player.isHost ? " (เจ้าของห้อง)" : ""}${online.you?.id === player.id ? " · คุณ" : ""}
+          <span>${escapeHtml(player.name)}${player.isHost ? " (เจ้าของห้อง)" : ""}${
+            player.isBot ? "" : online.you?.id === player.id ? " · คุณ" : ""
+          }
             <span class="ready-pill ${readyClass}">${readyText}</span>
           </span>
-          ${kick}
+          ${actions.join("")}
         </li>`;
       })
       .join("");
 
-    if (els.lobbyReadyBtn) {
-      // หัวห้องพร้อมอัตโนมัติ · ไม่ต้องกดพร้อม
-      els.lobbyReadyBtn.hidden = isHost;
-      if (!isHost) {
-        const ready = Boolean(me?.ready);
-        els.lobbyReadyBtn.textContent = ready ? "ยกเลิกพร้อม" : "กดพร้อม";
-        els.lobbyReadyBtn.classList.toggle("btn-start", !ready);
-        els.lobbyReadyBtn.classList.toggle("btn-ink", ready);
-      }
+    if (els.lobbyAddBotBtn) {
+      els.lobbyAddBotBtn.hidden = !isHost;
+      els.lobbyAddBotBtn.disabled = online.players.length >= MAX_PLAYERS;
+      els.lobbyAddBotBtn.textContent =
+        online.players.length >= MAX_PLAYERS ? "เต็ม 8 ที่แล้ว" : "เพิ่มบอทแข่ง";
     }
 
     els.lobbyStartBtn.hidden = !isHost;
@@ -1339,7 +1358,7 @@
     if (!isHost) {
       els.lobbyStartBtn.textContent = "เริ่มเกม";
     } else if (online.players.length < 2) {
-      els.lobbyStartBtn.textContent = "รอเพื่อนอย่างน้อย 2 คน";
+      els.lobbyStartBtn.textContent = "รอเพื่อนหรือเพิ่มบอท";
     } else if (!allReady) {
       els.lobbyStartBtn.textContent = waitingNames.length
         ? `รอพร้อม: ${waitingNames.join(", ")}`
@@ -1416,7 +1435,7 @@
           if (Array.isArray(msg.yourRows) && game) {
             game.players[0].rows = msg.yourRows;
           }
-          online.waiting = Boolean(msg.pending && !msg.botMode);
+          online.waiting = Boolean(msg.pending);
           renderPlay();
         } else {
           showScreen("lobby");
@@ -1434,7 +1453,7 @@
           const ends = msg.roundEndsAt || msg.endsAt;
           if (ends && online.endsAt !== ends) startGameTimer(ends);
           const me = meOnlineState(online.players);
-          online.waiting = Boolean(me?.submitted && !me?.botMode);
+          online.waiting = Boolean(me?.submitted);
         }
         renderPlay();
         break;
@@ -1457,8 +1476,6 @@
         updateSetupVisibility();
         if (msg.reason === "kicked") {
           showSetupError("ถูกเตะออกจากห้องเพราะยังไม่กดพร้อม");
-        } else if (msg.reason === "bot-afk") {
-          showSetupError("Bot เล่นแทนครบ 5 รอบ · ออกจากห้องแล้ว");
         }
         try {
           sendSocket({ type: "watchRooms" });
@@ -1601,10 +1618,19 @@
       const userBar = document.querySelector(".user-bar");
       if (userBar) userBar.hidden = false;
     }
+    const roomParam = new URLSearchParams(location.search).get("room");
+    if (roomParam) {
+      setup.mode = "online";
+      setChoiceGroup("[data-mode]", "mode", "online");
+      if (els.roomCodeInput) {
+        els.roomCodeInput.value = roomParam.trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+      }
+    }
     showScreen("setup");
     updateSetupVisibility();
     refreshOnlineCount();
     ensureSocket().catch(() => {});
+    if (window.TualekMusic?.start) window.TualekMusic.start().catch(() => {});
     if (!setup.names.length && currentUser()?.displayName) {
       setup.names = [currentUser().displayName];
       renderPlayerList();
@@ -1705,21 +1731,84 @@
     sendSocket({ type: "start" });
   });
 
-  if (els.lobbyReadyBtn) {
-    els.lobbyReadyBtn.addEventListener("click", () => {
+  if (els.lobbyAddBotBtn) {
+    els.lobbyAddBotBtn.addEventListener("click", () => {
       showLobbyError("");
-      const me = meOnlineState(online.players);
-      const nextReady = !me?.ready;
-      sendSocket({ type: "ready", ready: nextReady });
+      sendSocket({ type: "addBot" });
     });
   }
 
   els.lobbyPlayers.addEventListener("click", (event) => {
-    const btn = event.target.closest("[data-kick-id]");
-    if (!btn) return;
+    const readyBtn = event.target.closest("[data-ready-toggle]");
+    if (readyBtn) {
+      showLobbyError("");
+      sendSocket({ type: "ready", ready: readyBtn.dataset.readyToggle === "1" });
+      return;
+    }
+    const kickBtn = event.target.closest("[data-kick-id]");
+    if (!kickBtn) return;
     showLobbyError("");
-    sendSocket({ type: "kick", playerId: btn.dataset.kickId });
+    sendSocket({ type: "kick", playerId: kickBtn.dataset.kickId });
   });
+
+  function currentShareCode() {
+    return online.code || els.lobbyCode?.textContent || "";
+  }
+
+  if (els.shareCopyBtn) {
+    els.shareCopyBtn.addEventListener("click", async () => {
+      const code = currentShareCode();
+      if (!code) return;
+      try {
+        await navigator.clipboard.writeText(roomShareUrl(code));
+        showLobbyError("");
+        els.shareCopyBtn.textContent = "คัดลอกแล้ว";
+        window.setTimeout(() => {
+          els.shareCopyBtn.textContent = "คัดลอกลิงก์";
+        }, 1200);
+      } catch {
+        showLobbyError("คัดลอกลิงก์ไม่สำเร็จ");
+      }
+    });
+  }
+  if (els.shareLineBtn) {
+    els.shareLineBtn.addEventListener("click", () => {
+      const code = currentShareCode();
+      if (!code) return;
+      window.open(
+        `https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(roomShareUrl(code))}`,
+        "_blank",
+        "noopener,noreferrer"
+      );
+    });
+  }
+  if (els.shareFbBtn) {
+    els.shareFbBtn.addEventListener("click", () => {
+      const code = currentShareCode();
+      if (!code) return;
+      window.open(
+        `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(roomShareUrl(code))}`,
+        "_blank",
+        "noopener,noreferrer"
+      );
+    });
+  }
+  if (els.shareNativeBtn) {
+    els.shareNativeBtn.addEventListener("click", async () => {
+      const code = currentShareCode();
+      if (!code) return;
+      const url = roomShareUrl(code);
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: "เกมท้ายตัวเลข", text: shareText(code), url });
+        } catch {
+          /* cancelled */
+        }
+      } else {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+    });
+  }
 
   els.lobbyLeaveBtn.addEventListener("click", () => {
     leaveOnlineRoom();

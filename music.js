@@ -389,16 +389,19 @@
     syncToggle();
   }
 
-  // Auto-start after first user gesture (default: on)
+  // Try to start immediately; browsers may still require a gesture
   function armAutoStart() {
     if (!preferMusicOn() || startedOnce) return;
+    start().catch(() => {});
     const once = () => {
       document.removeEventListener("pointerdown", once);
       document.removeEventListener("keydown", once);
-      start();
+      document.removeEventListener("touchstart", once);
+      if (preferMusicOn()) start();
     };
     document.addEventListener("pointerdown", once, { once: true });
     document.addEventListener("keydown", once, { once: true });
+    document.addEventListener("touchstart", once, { once: true });
   }
 
   if (document.readyState === "loading") {

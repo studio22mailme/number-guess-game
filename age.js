@@ -29,6 +29,9 @@
   function saveAge(age) {
     localStorage.setItem(STORAGE_KEY, String(age));
     applyAgeTheme(age);
+    if (window.TualekMusic?.start) {
+      window.TualekMusic.start().catch(() => {});
+    }
   }
 
   function showAgeGate() {

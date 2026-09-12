@@ -116,28 +116,6 @@
           </div>
         </div>
 
-        <div class="field" id="online-field" hidden>
-          <p class="label">ล็อบบี้ห้องออนไลน์</p>
-          <input id="online-name-input" class="full-input" type="text" maxlength="20" placeholder="ชื่อของคุณในห้อง" value="ผู้เล่น" autocomplete="nickname" />
-          <ul id="room-list" class="room-list">
-            <li class="empty-players">ยังไม่มีห้อง · สร้างห้องใหม่ได้ด้านล่าง</li>
-          </ul>
-          <button type="button" id="refresh-rooms-btn" class="btn btn-ink">รีเฟรชรายชื่อห้อง</button>
-
-          <p class="label online-sub">สร้างห้องใหม่</p>
-          <input id="room-title-input" class="full-input" type="text" maxlength="24" placeholder="ชื่อห้อง เช่น ห้องเพื่อนซี้" autocomplete="off" />
-          <input id="room-password-input" class="full-input online-gap" type="password" maxlength="20" placeholder="รหัสเข้าห้อง (ว่างได้ = ห้องเปิด)" autocomplete="new-password" />
-
-          <p class="label online-sub">หรือเข้าร่วมด้วยรหัส</p>
-          <div class="rounds-row">
-            <label for="room-code-input">รหัสห้อง</label>
-            <input id="room-code-input" type="text" maxlength="4" placeholder="ABCD" autocomplete="off" class="room-code-input" />
-          </div>
-          <input id="join-password-input" class="full-input online-gap" type="password" maxlength="20" placeholder="รหัสผ่านห้อง (ถ้ามีล็อก)" autocomplete="current-password" />
-
-          <p id="online-hint" class="hint-block">แต่ละบรรทัดมี 2 นาที · ส่งได้เลยไม่รอเพื่อน · ไม่ส่งทัน Bot วิเคราะห์แล้วเล่นแทน · แตะจอเพื่อกลับมาเล่นเอง</p>
-        </div>
-
         <div class="field" id="repeat-field">
           <p class="label">ตัวเลขซ้ำได้ไหม</p>
           <div class="choice-row" role="radiogroup" aria-label="ตัวเลขซ้ำ">
@@ -161,12 +139,32 @@
         </div>
 
         <div class="field" id="players-field" hidden>
-          <p class="label">ชื่อผู้เล่น <span class="hint">อย่างน้อย 2 คน · กระดาษแยกกัน · สลับเครื่องเดียวกัน</span></p>
+          <p class="label">ชื่อผู้เล่น <span class="hint">อย่างน้อย 2 คน · กระดาษแยกกัน · เล่นเครื่องเดียวกัน</span></p>
           <ul id="player-list" class="player-list"></ul>
           <div class="add-row">
             <input id="player-name-input" type="text" maxlength="20" placeholder="พิมพ์ชื่อเพื่อน" autocomplete="off" />
             <button type="button" id="add-player-btn" class="btn btn-ink">เพิ่มชื่อ</button>
           </div>
+        </div>
+
+        <div class="field" id="online-field" hidden>
+          <p class="label">ล็อบบี้ห้องออนไลน์</p>
+          <input id="online-name-input" class="full-input" type="text" maxlength="20" placeholder="ชื่อของคุณในห้อง" value="ผู้เล่น" autocomplete="nickname" />
+          <ul id="room-list" class="room-list">
+            <li class="empty-players">ยังไม่มีห้อง · สร้างห้องใหม่ได้ด้านล่าง</li>
+          </ul>
+          <button type="button" id="refresh-rooms-btn" class="btn btn-ink">รีเฟรชรายชื่อห้อง</button>
+
+          <p class="label online-sub">สร้างห้องใหม่</p>
+          <input id="room-title-input" class="full-input" type="text" maxlength="24" placeholder="ชื่อห้อง เช่น ห้องเพื่อนซี้" autocomplete="off" />
+          <input id="room-password-input" class="full-input online-gap" type="password" maxlength="20" placeholder="รหัสเข้าห้อง (ว่างได้ = ห้องเปิด)" autocomplete="new-password" />
+
+          <p class="label online-sub">หรือเข้าร่วมด้วยรหัส</p>
+          <div class="rounds-row">
+            <label for="room-code-input">รหัสห้อง</label>
+            <input id="room-code-input" type="text" maxlength="4" placeholder="ABCD" autocomplete="off" class="room-code-input" />
+          </div>
+          <input id="join-password-input" class="full-input online-gap" type="password" maxlength="20" placeholder="รหัสผ่านห้อง (ถ้ามีล็อก)" autocomplete="current-password" />
         </div>
 
         <p id="setup-error" class="error" hidden></p>
@@ -189,11 +187,16 @@
           <p id="lobby-code" class="lobby-code"></p>
         </header>
         <p id="lobby-settings" class="hint-block"></p>
-        <p id="lobby-link" class="hint-block"></p>
+        <div class="share-row" id="lobby-share">
+          <button type="button" id="share-copy-btn" class="btn btn-ink">คัดลอกลิงก์</button>
+          <button type="button" id="share-line-btn" class="btn btn-ink">แชร์ไลน์</button>
+          <button type="button" id="share-fb-btn" class="btn btn-ink">แชร์เฟสบุ๊ค</button>
+          <button type="button" id="share-native-btn" class="btn btn-ink">แชร์อื่นๆ</button>
+        </div>
         <p class="label">ผู้เล่นในห้อง</p>
         <ul id="lobby-players" class="player-list"></ul>
+        <button type="button" id="lobby-add-bot-btn" class="btn btn-ink" hidden>เพิ่มบอทแข่ง</button>
         <p id="lobby-error" class="error" hidden></p>
-        <button type="button" id="lobby-ready-btn" class="btn btn-ink">กดพร้อม</button>
         <button type="button" id="lobby-start-btn" class="btn btn-start" hidden>เริ่มเกม</button>
         <button type="button" id="lobby-leave-btn" class="btn btn-ink lobby-leave">ออกจากห้อง</button>
       </article>

@@ -37,10 +37,10 @@ const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const ALLOW_DEMO_AUTH = process.env.ALLOW_DEMO_AUTH !== "0";
 
 const DIFFICULTY = {
-  easy: { id: "easy", digitCount: 4, secondsPerLine: 120, columnFeedback: true, timeoutEnds: false, allowBot: true },
-  normal: { id: "normal", digitCount: 4, secondsPerLine: 120, columnFeedback: false, timeoutEnds: false, allowBot: true },
-  hard: { id: "hard", digitCount: 5, secondsPerLine: 120, columnFeedback: false, timeoutEnds: false, allowBot: true },
-  extreme: { id: "extreme", digitCount: 5, secondsPerLine: 30, columnFeedback: false, timeoutEnds: false, allowBot: true },
+  easy: { id: "easy", digitCount: 4, secondsPerLine: 120, columnFeedback: true, timeoutEnds: false },
+  normal: { id: "normal", digitCount: 4, secondsPerLine: 120, columnFeedback: false, timeoutEnds: false },
+  hard: { id: "hard", digitCount: 5, secondsPerLine: 120, columnFeedback: false, timeoutEnds: false },
+  extreme: { id: "extreme", digitCount: 5, secondsPerLine: 30, columnFeedback: false, timeoutEnds: false },
 };
 
 function difficultyConfig(id) {
@@ -131,12 +131,10 @@ function publicPlayers(room) {
     name: player.name,
     uid: player.uid || null,
     isHost: player.id === room.hostId,
+    isBot: Boolean(player.isBot),
     submitted: Boolean(player.pending),
-    botMode: Boolean(player.botMode),
-    fromBot: Boolean(player.pending?.fromBot),
-    connected: Boolean(player.ws && player.ws.readyState === 1),
-    ready: Boolean(player.ready),
-    botStreak: Number(player.botStreak || 0),
+    connected: Boolean(player.isBot || (player.ws && player.ws.readyState === 1)),
+    ready: Boolean(player.ready || player.isBot),
   }));
 }
 
@@ -170,8 +168,27 @@ function publicRoomList() {
       roundLimit: room.roundLimit,
       difficulty: room.difficulty,
       digitCount: room.digitCount,
+      secondsPerLine: room.secondsPerLine,
       hostName: room.players.get(room.hostId)?.name || "",
     }));
+}
+
+function pickNextHostId(room) {
+  for (const player of room.players.values()) {
+    if (!player.isBot) return player.id;
+  }
+  return null;
+}
+
+function transferHost(room) {
+  const nextId = pickNextHostId(room);
+  if (!nextId) {
+    room.hostId = null;
+    return;
+  }
+  room.hostId = nextId;
+  const host = room.players.get(nextId);
+  if (host) host.ready = true;
 }
 
 function broadcastRoomList() {
@@ -284,15 +301,22 @@ function assignBotGuess(player, room) {
   };
 }
 
-function roomAllowsBot(room) {
-  return Boolean(room.allowBot);
+function makeSkippedRow(digitCount) {
+  return {
+    guess: Array(digitCount).fill(null),
+    blacks: 0,
+    whites: 0,
+    win: false,
+    none: true,
+    skipped: true,
+  };
 }
 
 function beginRoundClock(room) {
   room.roundEndsAt = Date.now() + room.secondsPerLine * 1000;
   for (const player of room.players.values()) {
     player.pending = null;
-    if (player.botMode && roomAllowsBot(room)) assignBotGuess(player, room);
+    if (player.isBot) assignBotGuess(player, room);
   }
 }
 
@@ -449,7 +473,7 @@ async function endGame(room, reason, winners = []) {
   if (reason === "win" && winners.length) {
     for (const winner of winners) {
       const player = [...room.players.values()].find((item) => item.id === winner.id);
-      if (!player?.uid) continue;
+      if (!player?.uid || player.isBot) continue;
       try {
         await recordWin({
           uid: player.uid,
@@ -488,19 +512,6 @@ function maybeTimeout(room) {
   if (room.status !== "playing" || !room.roundEndsAt) return;
   if (Date.now() < room.roundEndsAt) return;
   room.roundEndsAt = null;
-
-  if (room.timeoutEnds) {
-    endGame(room, "timeout", []);
-    return;
-  }
-
-  if (roomAllowsBot(room)) {
-    for (const player of room.players.values()) {
-      if (player.pending) continue;
-      player.botMode = true;
-      assignBotGuess(player, room);
-    }
-  }
   finishRound(room);
 }
 
@@ -510,16 +521,23 @@ function finishRound(room) {
 
   const results = [];
   const winners = [];
-  const botKickIds = [];
 
   for (const player of room.players.values()) {
     const pending = player.pending;
     if (!pending) {
-      if (player.botMode) player.botStreak = Number(player.botStreak || 0);
+      const skipped = makeSkippedRow(room.digitCount);
+      player.rows.push(skipped);
+      player.pending = null;
+      results.push({ id: player.id, name: player.name, row: skipped });
       continue;
     }
     const result = evaluateGuess(pending.guess, room.secret);
-    const row = { guess: pending.guess, ...result, fromBot: Boolean(pending.fromBot) };
+    const row = {
+      guess: pending.guess,
+      ...result,
+      fromBot: Boolean(pending.fromBot || player.isBot),
+      skipped: false,
+    };
     player.rows.push(row);
     player.pending = null;
     results.push({
@@ -527,19 +545,20 @@ function finishRound(room) {
       name: player.name,
       row,
     });
-    if (pending.fromBot) {
-      player.botStreak = Number(player.botStreak || 0) + 1;
-      if (player.botStreak >= 5) botKickIds.push(player.id);
-    } else {
-      player.botStreak = 0;
-      player.botMode = false;
+    if (result.win) {
+      winners.push({
+        id: player.id,
+        name: player.name,
+        uid: player.isBot ? null : player.uid || null,
+        isBot: Boolean(player.isBot),
+      });
     }
-    if (result.win) winners.push({ id: player.id, name: player.name, uid: player.uid || null });
   }
 
   room.currentRound += 1;
 
   for (const player of room.players.values()) {
+    if (player.isBot) continue;
     send(player.ws, "roundResult", {
       round: room.currentRound,
       yourRow: results.find((item) => item.id === player.id)?.row || null,
@@ -558,21 +577,6 @@ function finishRound(room) {
     endGame(room, "rounds", []);
     return;
   }
-
-  for (const kickId of botKickIds) {
-    const kicked = room.players.get(kickId);
-    if (!kicked) continue;
-    send(kicked.ws, "error", { message: "Bot เล่นแทนครบ 5 รอบ · ออกจากห้องแล้ว" });
-    send(kicked.ws, "left", { reason: "bot-afk" });
-    if (kicked.ws) {
-      kicked.ws.roomCode = null;
-      kicked.ws.playerId = null;
-    }
-    removePlayerFromRoom(room, kickId);
-    if (room.status !== "playing") return;
-  }
-
-  if (room.status !== "playing") return;
 
   beginRoundClock(room);
   broadcastRoundState(room, "waiting");
@@ -615,8 +619,7 @@ async function createRoom(ws, msg) {
     ws,
     rows: [],
     pending: null,
-    botMode: false,
-    botStreak: 0,
+    isBot: false,
     ready: true,
   };
 
@@ -632,7 +635,6 @@ async function createRoom(ws, msg) {
     secondsPerLine: cfg.secondsPerLine,
     columnFeedback: cfg.columnFeedback,
     timeoutEnds: cfg.timeoutEnds,
-    allowBot: cfg.allowBot,
     status: "lobby",
     secret: null,
     currentRound: 0,
@@ -710,8 +712,7 @@ async function joinRoom(ws, msg) {
     ws,
     rows: [],
     pending: null,
-    botMode: false,
-    botStreak: 0,
+    isBot: false,
     ready: false,
   };
   room.players.set(player.id, player);
@@ -747,7 +748,7 @@ function startGame(ws) {
     return;
   }
   const notReady = [...room.players.values()].filter(
-    (player) => !player.ready && player.id !== room.hostId
+    (player) => !player.isBot && !player.ready && player.id !== room.hostId
   );
   if (notReady.length) {
     send(ws, "error", {
@@ -764,8 +765,6 @@ function startGame(ws) {
   for (const player of room.players.values()) {
     player.rows = [];
     player.pending = null;
-    player.botMode = false;
-    player.botStreak = 0;
   }
 
   beginRoundClock(room);
@@ -822,17 +821,50 @@ function kickPlayer(ws, msg) {
     send(ws, "error", { message: "เตะเจ้าของห้องไม่ได้" });
     return;
   }
-  if (target.ready) {
-    send(ws, "error", { message: "เตะได้เฉพาะคนที่ยังไม่กดพร้อม" });
+  if (!target.isBot && target.ready) {
+    send(ws, "error", { message: "เตะได้เฉพาะคนที่ยังไม่กดพร้อม หรือบอท" });
     return;
   }
-  send(target.ws, "error", { message: "ถูกเตะออกจากห้องเพราะยังไม่กดพร้อม" });
-  send(target.ws, "left", { reason: "kicked" });
-  if (target.ws) {
-    target.ws.roomCode = null;
-    target.ws.playerId = null;
+  if (!target.isBot) {
+    send(target.ws, "error", { message: "ถูกเตะออกจากห้องเพราะยังไม่กดพร้อม" });
+    send(target.ws, "left", { reason: "kicked" });
+    if (target.ws) {
+      target.ws.roomCode = null;
+      target.ws.playerId = null;
+    }
   }
   removePlayerFromRoom(room, targetId);
+  broadcastRoomList();
+}
+
+function addLobbyBot(ws) {
+  const room = rooms.get(ws.roomCode);
+  if (!room || room.status !== "lobby") {
+    send(ws, "error", { message: "เพิ่มบอทได้เฉพาะตอนรอในห้อง" });
+    return;
+  }
+  if (ws.playerId !== room.hostId) {
+    send(ws, "error", { message: "เฉพาะเจ้าของห้องเพิ่มบอทได้" });
+    return;
+  }
+  if (room.players.size >= MAX_PLAYERS) {
+    send(ws, "error", { message: `ห้องเต็มแล้ว (สูงสุด ${MAX_PLAYERS} ที่)` });
+    return;
+  }
+  const botCount = [...room.players.values()].filter((player) => player.isBot).length;
+  const bot = {
+    id: cryptoRandomId(),
+    uid: null,
+    name: `บอท ${botCount + 1}`,
+    photoURL: "",
+    ws: null,
+    rows: [],
+    pending: null,
+    isBot: true,
+    ready: true,
+  };
+  room.players.set(bot.id, bot);
+  broadcast(room, "lobby", lobbyPayload(room));
   broadcastRoomList();
 }
 
@@ -847,7 +879,7 @@ function submitGuess(ws, msg) {
   if (room.status !== "playing") return;
 
   const player = room.players.get(ws.playerId);
-  if (!player) return;
+  if (!player || player.isBot) return;
 
   const expectedRound = room.currentRound + 1;
   const round = Number(msg.round);
@@ -855,7 +887,7 @@ function submitGuess(ws, msg) {
     send(ws, "error", { message: "รอบไม่ตรงกับเซิร์ฟเวอร์" });
     return;
   }
-  if (player.pending && !player.pending.fromBot) {
+  if (player.pending) {
     send(ws, "error", { message: "ส่งคำตอบรอบนี้แล้ว" });
     return;
   }
@@ -870,29 +902,12 @@ function submitGuess(ws, msg) {
     return;
   }
 
-  player.botMode = false;
-  player.botStreak = 0;
   player.pending = { guess: digits, fromBot: false };
   broadcastRoundState(room, "waiting");
 
-  // ทายถูกทันที = จบเกม
   const instantWin = evaluateGuess(digits, room.secret).win;
   const allIn = [...room.players.values()].every((item) => item.pending);
   if (instantWin || allIn) finishRound(room);
-}
-
-function resumeHuman(ws) {
-  const room = rooms.get(ws.roomCode);
-  if (!room || room.status !== "playing") return;
-  const player = room.players.get(ws.playerId);
-  if (!player) return;
-
-  player.botMode = false;
-  player.botStreak = 0;
-  if (player.pending?.fromBot) {
-    player.pending = null;
-  }
-  broadcastRoundState(room, "waiting");
 }
 
 function leaveCurrent(ws, { intentional = true } = {}) {
@@ -915,32 +930,35 @@ function leaveCurrent(ws, { intentional = true } = {}) {
       ws.playerId = null;
       return;
     }
+
+    // ล็อบบี้: หลุด = ออกทันที · โอนหัวห้องถ้าจำเป็น
+    if (room.status === "lobby") {
+      ws.roomCode = null;
+      ws.playerId = null;
+      removePlayerFromRoom(room, playerId);
+      broadcastRoomList();
+      return;
+    }
+
+    // ระหว่างเกม: ไม่มีบอทเล่นแทน · รอ timeout แถวว่าง หรือครบ 90 วิแล้วเอาออก
     player.ws = null;
     player.connected = false;
     player.disconnectAt = Date.now();
-    if (room.status === "playing" && roomAllowsBot(room)) {
-      player.botMode = true;
-      if (!player.pending) assignBotGuess(player, room);
-    }
     const staleId = playerId;
     const staleCode = code;
     setTimeout(() => {
       const current = rooms.get(staleCode);
       if (!current) return;
       const stale = current.players.get(staleId);
-      if (!stale || stale.ws) return;
+      if (!stale || stale.ws || stale.isBot) return;
       removePlayerFromRoom(current, staleId);
     }, 90_000);
     ws.roomCode = null;
     ws.playerId = null;
-    if (room.status === "lobby") {
-      broadcast(room, "lobby", lobbyPayload(room));
-      broadcastRoomList();
-    } else if (room.status === "playing") {
-      broadcastRoundState(room, "waiting");
-      if ([...room.players.values()].every((item) => item.pending)) {
-        finishRound(room);
-      }
+    if (room.hostId === playerId) transferHost(room);
+    broadcastRoundState(room, "waiting");
+    if ([...room.players.values()].every((item) => item.pending)) {
+      finishRound(room);
     }
     return;
   }
@@ -960,15 +978,12 @@ function removePlayerFromRoom(room, playerId) {
   }
 
   if (room.hostId === playerId) {
-    room.hostId = room.players.keys().next().value;
-    const newHost = room.players.get(room.hostId);
-    if (newHost) newHost.ready = true;
+    transferHost(room);
   }
 
   if (room.status === "playing") {
     const remaining = [...room.players.values()];
-    const connected = remaining.filter((item) => item.ws);
-    if (connected.length < 1 || remaining.length < 2) {
+    if (remaining.length < 2) {
       endGame(room, "abandoned", []);
       return;
     }
@@ -1067,7 +1082,6 @@ async function rejoinRoom(ws, msg) {
       players: publicPlayers(room),
       yourRows: player.rows,
       pending: Boolean(player.pending),
-      botMode: Boolean(player.botMode),
     });
     broadcastRoundState(room, "waiting");
     return;
@@ -1255,14 +1269,14 @@ wss.on("connection", (ws) => {
         case "kick":
           kickPlayer(ws, msg);
           break;
+        case "addBot":
+          addLobbyBot(ws);
+          break;
         case "start":
           startGame(ws);
           break;
         case "submit":
           submitGuess(ws, msg);
-          break;
-        case "resume":
-          resumeHuman(ws);
           break;
         case "leave":
           leaveCurrent(ws, { intentional: true });
