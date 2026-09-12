@@ -525,7 +525,7 @@
 
   function updateDifficultyUi() {
     if (els.setupTagline) {
-      els.setupTagline.textContent = "ฝึกสมองสนุกได้ทั้งเล่นคนเดียวและแข่งกับเพื่อน";
+      els.setupTagline.textContent = "ฝึกสมองเล่นสนุกคนเดียวและแข่งกับเพื่อน";
     }
     updateTimePreview();
   }
