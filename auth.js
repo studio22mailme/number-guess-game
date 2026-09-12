@@ -1,4 +1,7 @@
 (() => {
+  // ชั่วคราว: ปิดบังคับล็อกอิน ให้เล่นได้ทันทีแบบแขก
+  const AUTH_REQUIRED = false;
+
   const Auth = {
     ready: false,
     configured: false,
@@ -26,6 +29,13 @@
   }
 
   async function init() {
+    if (!AUTH_REQUIRED) {
+      Auth.ready = true;
+      Auth.configured = false;
+      loginDemo("ผู้เล่น");
+      return Auth;
+    }
+
     const config = await loadConfig();
     Auth.configured = isConfigReady(config);
 
@@ -157,6 +167,7 @@
   }
 
   window.TualekAuth = {
+    AUTH_REQUIRED,
     init,
     loginGoogle,
     loginFacebook,

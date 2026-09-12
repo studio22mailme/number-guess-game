@@ -1051,6 +1051,19 @@
 
   function enterApp() {
     renderUserBar();
+    const logoutBtn = document.getElementById("logout-btn");
+    const userNote = document.querySelector(".user-note");
+    if (!window.TualekAuth.AUTH_REQUIRED) {
+      if (logoutBtn) logoutBtn.hidden = true;
+      if (userNote) userNote.textContent = "เล่นแบบแขก (ยังไม่บังคับล็อกอิน)";
+      const userBar = document.querySelector(".user-bar");
+      if (userBar) userBar.hidden = true;
+    } else {
+      if (logoutBtn) logoutBtn.hidden = false;
+      if (userNote) userNote.textContent = "ล็อกอินแล้ว";
+      const userBar = document.querySelector(".user-bar");
+      if (userBar) userBar.hidden = false;
+    }
     showScreen("setup");
     updateSetupVisibility();
     if (!setup.names.length && currentUser()?.displayName) {
@@ -1234,6 +1247,11 @@
   document.getElementById("logout-btn").addEventListener("click", async () => {
     await window.TualekAuth.logout();
     leaveOnlineRoom();
+    if (!window.TualekAuth.AUTH_REQUIRED) {
+      window.TualekAuth.loginDemo("ผู้เล่น");
+      enterApp();
+      return;
+    }
     showLoginScreen();
   });
 
@@ -1259,7 +1277,12 @@
 
   window.addEventListener("auth-changed", () => {
     if (currentUser()) enterApp();
-    else showLoginScreen();
+    else if (!window.TualekAuth.AUTH_REQUIRED) {
+      window.TualekAuth.loginDemo("ผู้เล่น");
+      enterApp();
+    } else {
+      showLoginScreen();
+    }
   });
 
   renderPlayerList();
@@ -1267,9 +1290,19 @@
   window.TualekAuth.init()
     .then(() => {
       if (currentUser()) enterApp();
-      else showLoginScreen();
+      else if (!window.TualekAuth.AUTH_REQUIRED) {
+        window.TualekAuth.loginDemo("ผู้เล่น");
+        enterApp();
+      } else {
+        showLoginScreen();
+      }
     })
     .catch((error) => {
+      if (!window.TualekAuth.AUTH_REQUIRED) {
+        window.TualekAuth.loginDemo("ผู้เล่น");
+        enterApp();
+        return;
+      }
       els.loginStatus.textContent = "โหลดระบบสมาชิกไม่สำเร็จ";
       showLoginError(error.message);
       els.demoLogin.hidden = false;

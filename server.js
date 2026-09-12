@@ -5,6 +5,30 @@ const os = require("os");
 const crypto = require("crypto");
 const { WebSocketServer } = require("ws");
 
+// โหลด .env ในโฟลเดอร์โปรเจกต์ (ไม่ทับค่าที่มีอยู่แล้ว เช่นบน Render)
+try {
+  const envPath = path.join(__dirname, ".env");
+  if (fs.existsSync(envPath)) {
+    for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq <= 0) continue;
+      const key = trimmed.slice(0, eq).trim();
+      let value = trimmed.slice(eq + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      if (process.env[key] === undefined) process.env[key] = value;
+    }
+  }
+} catch (_) {
+  /* ignore */
+}
+
 const PORT = Number(process.env.PORT) || 3000;
 const DIGIT_COUNT = 4;
 const MAX_PLAYERS = 8;
