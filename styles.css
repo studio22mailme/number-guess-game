@@ -379,14 +379,19 @@ body {
   margin-top: 12px;
   margin-bottom: 4px;
   padding: 14px 12px 12px;
-  border: 3px solid var(--line);
+  border: 3px solid rgba(43, 58, 92, 0.45);
   border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.55);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+  background: rgba(36, 48, 68, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 
 .lobby-box-title {
   margin-bottom: 8px;
+}
+
+.online-lobby-box .empty-players {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(43, 58, 92, 0.28);
 }
 
 .join-code-row {
@@ -1002,6 +1007,11 @@ html[data-age-theme="senior"] .dot-grid {
   border-radius: var(--radius-sm);
   background: #fff;
   padding: 10px 12px;
+}
+
+.online-lobby-box .room-item {
+  background: #fffefb;
+  box-shadow: 0 2px 0 rgba(43, 58, 92, 0.12);
 }
 
 .lb-rank {
