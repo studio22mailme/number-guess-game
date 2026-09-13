@@ -139,7 +139,7 @@
     appVersion: document.getElementById("app-version"),
   };
 
-  const APP_VERSION = window.TUALEK_VERSION || "1.3.05";
+  const APP_VERSION = window.TUALEK_VERSION || "1.3.06";
   if (els.appVersion) els.appVersion.textContent = `V${APP_VERSION}`;
 
   const DIFFICULTY_TITLE = {
@@ -1854,8 +1854,16 @@
   async function startOnlineFlow(settings) {
     showSetupError("");
     try {
+      if (!isRealUser()) {
+        requireOnlineAuth();
+        return;
+      }
       await ensureSocket();
       const idToken = await window.TualekAuth.getIdToken();
+      if (!idToken) {
+        showSetupError("โทเคนล็อกอินหมดอายุ · ออกแล้วล็อกอินใหม่");
+        return;
+      }
       online.password = settings.password || "";
       if (settings.action === "create") {
         sendSocket({

@@ -505,6 +505,31 @@ async function getLeaderboard(mode, difficulty) {
     .map((row, index) => ({ ...row, rank: index + 1 }));
 }
 
+function decodeJwtPayload(token) {
+  try {
+    const parts = String(token).split(".");
+    if (parts.length < 2) return null;
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    return JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function authFromJwtPayload(payload) {
+  if (!payload) return null;
+  const uid = payload.user_id || payload.sub || payload.uid;
+  if (!uid) return null;
+  if (payload.exp && Number(payload.exp) * 1000 < Date.now() - 60_000) return null;
+  return {
+    uid: String(uid),
+    name: payload.name || payload.email || "ผู้เล่น",
+    picture: payload.picture || "",
+    demo: false,
+  };
+}
+
 async function verifyAuthToken(idToken) {
   if (!idToken) return null;
   if (String(idToken).startsWith("demo:")) {
@@ -518,14 +543,24 @@ async function verifyAuthToken(idToken) {
       demo: true,
     };
   }
-  if (!admin) return null;
-  const decoded = await admin.auth().verifyIdToken(idToken);
-  return {
-    uid: decoded.uid,
-    name: decoded.name || decoded.email || "ผู้เล่น",
-    picture: decoded.picture || "",
-    demo: false,
-  };
+
+  if (admin) {
+    try {
+      const decoded = await admin.auth().verifyIdToken(idToken);
+      return {
+        uid: decoded.uid,
+        name: decoded.name || decoded.email || "ผู้เล่น",
+        picture: decoded.picture || "",
+        demo: false,
+      };
+    } catch (error) {
+      console.error("verifyIdToken failed:", error.message);
+      return null;
+    }
+  }
+
+  // ไม่มี FIREBASE_SERVICE_ACCOUNT: อ่าน JWT จาก Firebase Auth (ใช้เล่นบนเครื่อง/Deploy ชั่วคราว)
+  return authFromJwtPayload(decodeJwtPayload(idToken));
 }
 
 async function endGame(room, reason, winners = []) {
