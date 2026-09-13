@@ -1,6 +1,9 @@
 (() => {
-  // ชั่วคราว: ปิดบังคับล็อกอิน ให้เล่นได้ทันทีแบบแขก
+  // หน้าแรกเกมนี้ยังไม่บังคับล็อกอิน (คนเดียว / ส่งเครื่อง = แขกได้)
+  // อนาคตเว็ปรวมเกมจะบังคับล็อกอินตั้งแต่หน้าแรกพอร์ทัลแทน
   const AUTH_REQUIRED = false;
+  // โหมดคนละเครื่องต้องล็อกอิน Google / Facebook จริง
+  const ONLINE_AUTH_REQUIRED = true;
 
   const Auth = {
     ready: false,
@@ -28,19 +31,17 @@
     return window.FIREBASE_WEB_CONFIG || {};
   }
 
-  async function init() {
-    if (!AUTH_REQUIRED) {
-      Auth.ready = true;
-      Auth.configured = false;
-      loginDemo("ผู้เล่น");
-      return Auth;
-    }
+  function isRealUser() {
+    return Boolean(Auth.user && !Auth.demo);
+  }
 
+  async function init() {
     const config = await loadConfig();
     Auth.configured = isConfigReady(config);
 
     if (!Auth.configured) {
       Auth.ready = true;
+      if (!AUTH_REQUIRED) loginDemo("ผู้เล่น");
       return Auth;
     }
 
@@ -54,10 +55,28 @@
     Auth.auth = firebase.auth();
     Auth.db = firebase.firestore();
 
+    try {
+      const redirect = await Auth.auth.getRedirectResult();
+      if (redirect?.user) {
+        Auth.user = redirect.user;
+        Auth.demo = false;
+        await ensureUserDoc(redirect.user);
+      }
+    } catch (error) {
+      console.error("Firebase redirect result:", error);
+    }
+
     await new Promise((resolve) => {
       const unsub = Auth.auth.onAuthStateChanged((user) => {
-        Auth.user = user;
-        Auth.demo = false;
+        if (user) {
+          Auth.user = user;
+          Auth.demo = false;
+        } else if (!AUTH_REQUIRED) {
+          loginDemo("ผู้เล่น");
+        } else {
+          Auth.user = null;
+          Auth.demo = false;
+        }
         Auth.ready = true;
         unsub();
         resolve();
@@ -65,12 +84,21 @@
     });
 
     Auth.auth.onAuthStateChanged(async (user) => {
-      Auth.user = user;
-      Auth.demo = false;
       if (user) {
+        Auth.user = user;
+        Auth.demo = false;
         await ensureUserDoc(user);
+        window.dispatchEvent(new CustomEvent("auth-changed", { detail: { user } }));
+        return;
       }
-      window.dispatchEvent(new CustomEvent("auth-changed", { detail: { user } }));
+      if (AUTH_REQUIRED) {
+        Auth.user = null;
+        Auth.demo = false;
+        window.dispatchEvent(new CustomEvent("auth-changed", { detail: { user: null } }));
+        return;
+      }
+      // ออกจากระบบจริง → กลับเป็นแขกสำหรับโหมดคนเดียว/ส่งเครื่อง
+      loginDemo("ผู้เล่น");
     });
 
     return Auth;
@@ -92,22 +120,53 @@
       await Auth.db
         .collection("stats")
         .doc(user.uid)
-        .set({ soloWins: 0, multiWins: 0, onlineWins: 0, displayName: payload.displayName, photoURL: payload.photoURL }, { merge: true });
+        .set(
+          {
+            soloWins: 0,
+            multiWins: 0,
+            onlineWins: 0,
+            displayName: payload.displayName,
+            photoURL: payload.photoURL,
+          },
+          { merge: true }
+        );
     } else {
       await ref.set(payload, { merge: true });
     }
   }
 
+  async function signInWithProvider(provider) {
+    if (!Auth.configured || !Auth.auth) throw new Error("ยังไม่ได้ตั้งค่า Firebase");
+    if (location.protocol === "file:") {
+      throw new Error(
+        "เปิดเกมผ่าน http://localhost:3000 เท่านั้น (อย่าดับเบิลคลิกไฟล์ index.html)"
+      );
+    }
+    try {
+      await Auth.auth.signInWithPopup(provider);
+    } catch (error) {
+      const code = error?.code || "";
+      if (
+        code === "auth/popup-blocked" ||
+        code === "auth/cancelled-popup-request" ||
+        code === "auth/operation-not-supported-in-this-environment"
+      ) {
+        await Auth.auth.signInWithRedirect(provider);
+        return;
+      }
+      throw error;
+    }
+  }
+
   async function loginGoogle() {
-    if (!Auth.configured) throw new Error("ยังไม่ได้ตั้งค่า Firebase");
     const provider = new firebase.auth.GoogleAuthProvider();
-    await Auth.auth.signInWithPopup(provider);
+    provider.setCustomParameters({ prompt: "select_account" });
+    await signInWithProvider(provider);
   }
 
   async function loginFacebook() {
-    if (!Auth.configured) throw new Error("ยังไม่ได้ตั้งค่า Firebase");
     const provider = new firebase.auth.FacebookAuthProvider();
-    await Auth.auth.signInWithPopup(provider);
+    await signInWithProvider(provider);
   }
 
   function loginDemo(name) {
@@ -143,6 +202,10 @@
     if (Auth.demo) {
       Auth.user = null;
       Auth.demo = false;
+      if (!AUTH_REQUIRED) {
+        loginDemo("ผู้เล่น");
+        return;
+      }
       window.dispatchEvent(new CustomEvent("auth-changed", { detail: { user: null } }));
       return;
     }
@@ -195,6 +258,7 @@
 
   window.TualekAuth = {
     AUTH_REQUIRED,
+    ONLINE_AUTH_REQUIRED,
     init,
     loginGoogle,
     loginFacebook,
@@ -202,6 +266,7 @@
     logout,
     getIdToken,
     fetchLeaderboard,
+    isRealUser,
     get state() {
       return Auth;
     },

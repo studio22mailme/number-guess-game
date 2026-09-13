@@ -120,6 +120,7 @@ function initFirebaseAdmin() {
 initFirebaseAdmin();
 
 function getFirebaseWebConfig() {
+  // env บน Render ถ้าไม่มี ให้ client ใช้ firebase-config.js ต่อ
   return {
     apiKey: process.env.FIREBASE_API_KEY || "",
     authDomain: process.env.FIREBASE_AUTH_DOMAIN || "",
@@ -147,6 +148,7 @@ function publicPlayers(room) {
   return [...room.players.values()].map((player) => ({
     id: player.id,
     name: player.name,
+    photoURL: player.photoURL || "",
     uid: player.uid || null,
     isHost: player.id === room.hostId,
     isBot: Boolean(player.isBot),
@@ -665,6 +667,7 @@ async function createRoom(ws, msg) {
   const allowRepeat = Boolean(msg.allowRepeat);
   const roundLimit = Number(msg.roundLimit);
   const cfg = difficultyConfig(msg.difficulty);
+  const photoURL = String(msg.photoURL || auth.picture || "").slice(0, 350000);
 
   if (!name) {
     send(ws, "error", { message: "กรุณาใส่ชื่อ" });
@@ -682,7 +685,7 @@ async function createRoom(ws, msg) {
     id: cryptoRandomId(),
     uid: auth.uid,
     name,
-    photoURL: auth.picture || "",
+    photoURL,
     ws,
     rows: [],
     pending: null,
@@ -737,6 +740,7 @@ async function joinRoom(ws, msg) {
     .trim()
     .toUpperCase();
   const password = String(msg.password || "");
+  const photoURL = String(msg.photoURL || auth.picture || "").slice(0, 350000);
 
   if (!name) {
     send(ws, "error", { message: "กรุณาใส่ชื่อ" });
@@ -775,7 +779,7 @@ async function joinRoom(ws, msg) {
     id: cryptoRandomId(),
     uid: auth.uid,
     name,
-    photoURL: auth.picture || "",
+    photoURL,
     ws,
     rows: [],
     pending: null,

@@ -59,6 +59,7 @@
     loginStatus: document.getElementById("login-status"),
     loginError: document.getElementById("login-error"),
     loginActions: document.getElementById("login-actions"),
+    loginBackBtn: document.getElementById("login-back-btn"),
     demoLogin: document.getElementById("demo-login"),
     demoNameInput: document.getElementById("demo-name-input"),
     userAvatar: document.getElementById("user-avatar"),
@@ -71,6 +72,11 @@
     roomList: document.getElementById("room-list"),
     onlineNameInput: document.getElementById("online-name-input"),
     onlineHint: document.getElementById("online-hint"),
+    onlineAvatarPreview: document.getElementById("online-avatar-preview"),
+    onlineAvatarFallback: document.getElementById("online-avatar-fallback"),
+    onlineAvatarChangeBtn: document.getElementById("online-avatar-change-btn"),
+    onlineAvatarResetBtn: document.getElementById("online-avatar-reset-btn"),
+    onlineAvatarFile: document.getElementById("online-avatar-file"),
     roomTitleInput: document.getElementById("room-title-input"),
     roomPasswordInput: document.getElementById("room-password-input"),
     joinPasswordInput: document.getElementById("join-password-input"),
@@ -133,7 +139,7 @@
     appVersion: document.getElementById("app-version"),
   };
 
-  const APP_VERSION = window.TUALEK_VERSION || "1.2.03";
+  const APP_VERSION = window.TUALEK_VERSION || "1.3.05";
   if (els.appVersion) els.appVersion.textContent = `V${APP_VERSION}`;
 
   const DIFFICULTY_TITLE = {
@@ -143,6 +149,7 @@
     extreme: "ยากมาก",
   };
 
+  let pendingOnlineAuth = false;
   let modeCounts = { solo: 0, multi: 0, online: 0 };
 
   const setup = {
@@ -615,6 +622,12 @@
 
     if (isOnline) {
       els.startBtn.textContent = "เข้าห้อง / สร้างห้อง";
+      if (els.onlineHint) {
+        els.onlineHint.hidden = false;
+        els.onlineHint.textContent = isRealUser()
+          ? "ล็อกอินแล้ว · พร้อมเล่นโหมดคนละเครื่อง"
+          : "ต้องล็อกอินด้วย Google หรือ Facebook";
+      }
       updateTimePreview();
       ensureSocket()
         .then(() => sendSocket({ type: "watchRooms" }))
@@ -622,6 +635,7 @@
     } else {
       els.timePreview.hidden = true;
       els.startBtn.textContent = "เริ่มเกม";
+      if (els.onlineHint) els.onlineHint.hidden = true;
     }
 
     if (els.leaderboardLabel) {
@@ -736,6 +750,7 @@
           return `
           <li class="leaderboard-item">
             <span class="lb-rank">#${row.rank}</span>
+            ${avatarMarkup(row.photoURL, row.name, "lb-avatar")}
             <span class="lb-name">${escapeHtml(row.name)}</span>
             <span class="lb-wins">${wins} ชนะ${timeText}</span>
           </li>`;
@@ -765,7 +780,7 @@
           difficulty: game?.difficulty || setup.difficulty || "normal",
           durationMinutes: gameDurationMinutes(),
           displayName: user.displayName || "ผู้เล่น",
-          photoURL: user.photoURL || "",
+          photoURL: getProfilePhoto() || user.photoURL || "",
         }),
       });
       refreshLeaderboard();
@@ -794,12 +809,15 @@
       if (!name) {
         return { error: "กรุณาใส่ชื่อของคุณในห้อง" };
       }
+      saveProfileName(name);
+      const photoURL = getProfilePhoto();
 
       if (code) {
         return {
           mode: "online",
           action: "join",
           name,
+          photoURL,
           code,
           password: joinPassword,
           roundLimit,
@@ -813,6 +831,7 @@
         mode: "online",
         action: "create",
         name,
+        photoURL,
         roomName: roomName || defaultRoomNameFromNow(),
         password,
         allowRepeat: setup.allowRepeat,
@@ -1592,7 +1611,8 @@
         }
         return `
         <li class="player-item">
-          <span>${escapeHtml(player.name)}${player.isHost ? " (เจ้าของห้อง)" : ""}${
+          ${avatarMarkup(player.photoURL, player.name, "lobby-avatar")}
+          <span class="player-item-main">${escapeHtml(player.name)}${player.isHost ? " (เจ้าของห้อง)" : ""}${
             player.isBot ? "" : online.you?.id === player.id ? " · คุณ" : ""
           }
             <span class="ready-pill ${readyClass}">${readyText}</span>
@@ -1842,6 +1862,7 @@
           type: "create",
           idToken,
           name: settings.name,
+          photoURL: settings.photoURL || "",
           roomName: settings.roomName,
           password: settings.password || "",
           allowRepeat: settings.allowRepeat,
@@ -1853,6 +1874,7 @@
           type: "join",
           idToken,
           name: settings.name,
+          photoURL: settings.photoURL || "",
           code: settings.code,
           password: settings.password || "",
         });
@@ -1874,20 +1896,158 @@
     }
   }
 
+  function profileKey(kind) {
+    const uid = currentUser()?.uid || "guest";
+    return `tualek-profile-${kind}-${uid}`;
+  }
+
+  function getProviderPhoto() {
+    return currentUser()?.photoURL || "";
+  }
+
+  function getCustomAvatar() {
+    try {
+      return localStorage.getItem(profileKey("avatar")) || "";
+    } catch {
+      return "";
+    }
+  }
+
+  function getProfilePhoto() {
+    return getCustomAvatar() || getProviderPhoto();
+  }
+
+  function getSavedProfileName() {
+    try {
+      return localStorage.getItem(profileKey("name")) || "";
+    } catch {
+      return "";
+    }
+  }
+
+  function saveProfileName(name) {
+    try {
+      localStorage.setItem(profileKey("name"), String(name || "").trim().slice(0, 20));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function saveCustomAvatar(dataUrl) {
+    try {
+      if (dataUrl) localStorage.setItem(profileKey("avatar"), dataUrl);
+      else localStorage.removeItem(profileKey("avatar"));
+    } catch {
+      showSetupError("บันทึกรูปไม่สำเร็จ ลองรูปที่เล็กกว่า");
+    }
+  }
+
+  function avatarMarkup(photoURL, name, extraClass = "") {
+    const label = escapeHtml((name || "?").trim().slice(0, 1) || "?");
+    if (photoURL) {
+      return `<img class="mini-avatar ${extraClass}" src="${escapeHtml(photoURL)}" alt="" width="32" height="32" />`;
+    }
+    return `<span class="mini-avatar mini-avatar-fallback ${extraClass}" aria-hidden="true">${label}</span>`;
+  }
+
+  function syncOnlineProfileUi() {
+    if (!els.onlineNameInput) return;
+    const saved = getSavedProfileName();
+    const fromUser = currentUser()?.displayName || "";
+    if (!els.onlineNameInput.value.trim()) {
+      els.onlineNameInput.value = saved || fromUser || "";
+    }
+    const photo = getProfilePhoto();
+    if (els.onlineAvatarPreview) {
+      if (photo) {
+        els.onlineAvatarPreview.src = photo;
+        els.onlineAvatarPreview.hidden = false;
+        if (els.onlineAvatarFallback) els.onlineAvatarFallback.hidden = true;
+      } else {
+        els.onlineAvatarPreview.hidden = true;
+        els.onlineAvatarPreview.removeAttribute("src");
+        if (els.onlineAvatarFallback) {
+          els.onlineAvatarFallback.hidden = false;
+          els.onlineAvatarFallback.textContent = (els.onlineNameInput.value || fromUser || "?").trim().slice(0, 1) || "?";
+        }
+      }
+    }
+  }
+
+  function compressImageFile(file) {
+    return new Promise((resolve, reject) => {
+      if (!file || !file.type.startsWith("image/")) {
+        reject(new Error("เลือกไฟล์รูปภาพเท่านั้น"));
+        return;
+      }
+      if (file.size > 8 * 1024 * 1024) {
+        reject(new Error("รูปใหญ่เกินไป (สูงสุด 8MB)"));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("อ่านไฟล์ไม่สำเร็จ"));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error("เปิดรูปไม่สำเร็จ"));
+        img.onload = () => {
+          const max = 128;
+          const scale = Math.min(1, max / Math.max(img.width, img.height));
+          const w = Math.max(1, Math.round(img.width * scale));
+          const h = Math.max(1, Math.round(img.height * scale));
+          const canvas = document.createElement("canvas");
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL("image/jpeg", 0.72));
+        };
+        img.src = String(reader.result);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function isRealUser() {
+    return Boolean(window.TualekAuth?.isRealUser?.() || (currentUser() && !window.TualekAuth.state.demo));
+  }
+
+  function requireOnlineAuth() {
+    if (!window.TualekAuth.ONLINE_AUTH_REQUIRED) return true;
+    if (isRealUser()) return true;
+    pendingOnlineAuth = true;
+    setup.mode = "online";
+    setChoiceGroup("[data-mode]", "mode", "online");
+    showLoginForOnline();
+    return false;
+  }
+
+  function showLoginForOnline() {
+    showScreen("login");
+    const configured = window.TualekAuth.state.configured;
+    els.loginStatus.textContent = configured
+      ? "ต้องล็อกอินด้วย Google หรือ Facebook"
+      : "ยังตั้งค่า Firebase ไม่ครบ · ตั้งค่าบน Render ตาม README ก่อนใช้โหมดคนละเครื่อง";
+    els.loginActions.hidden = !configured;
+    els.demoLogin.hidden = configured;
+    if (els.loginBackBtn) els.loginBackBtn.hidden = false;
+    showLoginError("");
+  }
+
   function enterApp() {
     renderUserBar();
     const logoutBtn = document.getElementById("logout-btn");
     const userNote = document.querySelector(".user-note");
-    if (!window.TualekAuth.AUTH_REQUIRED) {
-      if (logoutBtn) logoutBtn.hidden = true;
-      if (userNote) userNote.textContent = "เล่นแบบแขก (ยังไม่บังคับล็อกอิน)";
-      const userBar = document.querySelector(".user-bar");
-      if (userBar) userBar.hidden = true;
-    } else {
+    const userBar = document.querySelector(".user-bar");
+    const real = isRealUser();
+
+    if (real) {
       if (logoutBtn) logoutBtn.hidden = false;
-      if (userNote) userNote.textContent = "ล็อกอินแล้ว";
-      const userBar = document.querySelector(".user-bar");
+      if (userNote) userNote.textContent = "ล็อกอินแล้ว · ใช้โหมดคนละเครื่องได้";
       if (userBar) userBar.hidden = false;
+    } else {
+      if (logoutBtn) logoutBtn.hidden = true;
+      if (userNote) userNote.textContent = "เล่นแบบแขก · คนละเครื่องต้องล็อกอิน";
+      if (userBar) userBar.hidden = true;
     }
 
     restoreSetupSession();
@@ -1901,8 +2061,14 @@
       }
     }
 
+    if (pendingOnlineAuth && real) {
+      pendingOnlineAuth = false;
+      setup.mode = "online";
+      setChoiceGroup("[data-mode]", "mode", "online");
+    }
+
     const session = readRoomSession();
-    if (session?.code) {
+    if (session?.code && real) {
       showScreen("lobby");
       els.lobbyTitle.textContent = "กำลังกลับเข้าห้อง…";
       els.lobbyCode.textContent = session.code;
@@ -1913,7 +2079,12 @@
       if (els.lobbyStartBtn) els.lobbyStartBtn.hidden = true;
       if (els.lobbyAddBotBtn) els.lobbyAddBotBtn.hidden = true;
     } else {
-      showScreen("setup");
+      if (session?.code && !real) {
+        pendingOnlineAuth = true;
+        showLoginForOnline();
+      } else {
+        showScreen("setup");
+      }
     }
 
     updateSetupVisibility();
@@ -1921,10 +2092,11 @@
     refreshOnlineCount();
     ensureSocket()
       .then(() => {
-        if (session?.code) attemptAutoRejoin();
+        if (session?.code && real) attemptAutoRejoin();
       })
       .catch(() => {});
     if (window.TualekMusic?.start) window.TualekMusic.start().catch(() => {});
+    syncOnlineProfileUi();
     saveSetupSession();
   }
 
@@ -1932,18 +2104,27 @@
     showScreen("login");
     const configured = window.TualekAuth.state.configured;
     els.loginStatus.textContent = configured
-      ? "ล็อกอินด้วย Google หรือ Facebook เพื่อเริ่มเล่นและเก็บสถิติ"
-      : "ยังไม่ได้ตั้งค่า Firebase · ใช้โหมดทดลองได้ชั่วคราว หรือใส่ค่าใน Render ตาม README";
+      ? "ล็อกอินด้วย Google หรือ Facebook"
+      : "ยังตั้งค่า Firebase ไม่ครบ · ตั้งค่าบน Render ตาม README";
     els.loginActions.hidden = !configured;
     els.demoLogin.hidden = configured;
+    if (els.loginBackBtn) els.loginBackBtn.hidden = !window.TualekAuth.AUTH_REQUIRED;
+    showLoginError("");
   }
 
   document.querySelectorAll("[data-mode]").forEach((btn) => {
     btn.addEventListener("click", () => {
       setup.mode = btn.dataset.mode;
       setChoiceGroup("[data-mode]", "mode", setup.mode);
-      updateSetupVisibility();
       showSetupError("");
+      if (setup.mode === "online") {
+        if (!requireOnlineAuth()) {
+          saveSetupSession();
+          return;
+        }
+        syncOnlineProfileUi();
+      }
+      updateSetupVisibility();
       saveSetupSession();
     });
   });
@@ -2014,8 +2195,41 @@
 
   [els.onlineNameInput, els.roomTitleInput].forEach((input) => {
     if (!input) return;
-    input.addEventListener("input", saveSetupSession);
+    input.addEventListener("input", () => {
+      if (input === els.onlineNameInput) {
+        saveProfileName(input.value);
+        if (els.onlineAvatarFallback && els.onlineAvatarPreview?.hidden) {
+          els.onlineAvatarFallback.textContent = (input.value || "?").trim().slice(0, 1) || "?";
+        }
+      }
+      saveSetupSession();
+    });
   });
+
+  if (els.onlineAvatarChangeBtn && els.onlineAvatarFile) {
+    els.onlineAvatarChangeBtn.addEventListener("click", () => els.onlineAvatarFile.click());
+    els.onlineAvatarFile.addEventListener("change", async () => {
+      const file = els.onlineAvatarFile.files?.[0];
+      els.onlineAvatarFile.value = "";
+      if (!file) return;
+      try {
+        showSetupError("");
+        const dataUrl = await compressImageFile(file);
+        saveCustomAvatar(dataUrl);
+        syncOnlineProfileUi();
+      } catch (error) {
+        showSetupError(error.message || "เปลี่ยนรูปไม่สำเร็จ");
+      }
+    });
+  }
+
+  if (els.onlineAvatarResetBtn) {
+    els.onlineAvatarResetBtn.addEventListener("click", () => {
+      saveCustomAvatar("");
+      syncOnlineProfileUi();
+      showSetupError("");
+    });
+  }
 
   window.addEventListener("beforeunload", (event) => {
     saveSetupSession();
@@ -2080,9 +2294,13 @@
 
   els.startBtn.addEventListener("click", () => {
     if (!currentUser()) {
-      showLoginScreen();
-      return;
+      if (setup.mode === "online") {
+        requireOnlineAuth();
+        return;
+      }
+      window.TualekAuth.loginDemo("ผู้เล่น");
     }
+    if (setup.mode === "online" && !requireOnlineAuth()) return;
     const settings = collectSettings();
     if (settings.error) {
       showSetupError(settings.error);
@@ -2234,12 +2452,23 @@
     event.preventDefault();
   });
 
+  function friendlyAuthError(error) {
+    const raw = String(error?.message || error || "");
+    if (
+      location.protocol === "file:" ||
+      /operation-not-supported-in-this-environment|location\.protocol/i.test(raw)
+    ) {
+      return "เปิดเกมผ่าน http://localhost:3000 เท่านั้น (อย่าดับเบิลคลิกไฟล์ index.html) · ในโฟลเดอร์โปรเจกต์รัน npm start แล้วค่อยเปิดเบราว์เซอร์";
+    }
+    return raw || "ล็อกอินไม่สำเร็จ";
+  }
+
   document.getElementById("login-google-btn").addEventListener("click", async () => {
     showLoginError("");
     try {
       await window.TualekAuth.loginGoogle();
     } catch (error) {
-      showLoginError(error.message || "ล็อกอิน Google ไม่สำเร็จ");
+      showLoginError(friendlyAuthError(error));
     }
   });
 
@@ -2248,25 +2477,32 @@
     try {
       await window.TualekAuth.loginFacebook();
     } catch (error) {
-      showLoginError(error.message || "ล็อกอิน Facebook ไม่สำเร็จ");
+      showLoginError(friendlyAuthError(error));
     }
   });
 
   document.getElementById("login-demo-btn").addEventListener("click", () => {
     showLoginError("");
-    window.TualekAuth.loginDemo(els.demoNameInput.value);
+    window.TualekAuth.loginDemo(els.demoNameInput?.value || "ผู้เล่น");
     enterApp();
   });
 
+  if (els.loginBackBtn) {
+    els.loginBackBtn.addEventListener("click", () => {
+      pendingOnlineAuth = false;
+      setup.mode = "solo";
+      setChoiceGroup("[data-mode]", "mode", "solo");
+      showSetupError("");
+      showScreen("setup");
+      updateSetupVisibility();
+    });
+  }
+
   document.getElementById("logout-btn").addEventListener("click", async () => {
-    await window.TualekAuth.logout();
     leaveOnlineRoom();
-    if (!window.TualekAuth.AUTH_REQUIRED) {
-      window.TualekAuth.loginDemo("ผู้เล่น");
-      enterApp();
-      return;
-    }
-    showLoginScreen();
+    await window.TualekAuth.logout();
+    if (window.TualekAuth.AUTH_REQUIRED) showLoginScreen();
+    else enterApp();
   });
 
   document.addEventListener("keydown", (event) => {
@@ -2304,22 +2540,15 @@
   window.TualekAuth.init()
     .then(() => {
       if (currentUser()) enterApp();
-      else if (!window.TualekAuth.AUTH_REQUIRED) {
+      else {
         window.TualekAuth.loginDemo("ผู้เล่น");
         enterApp();
-      } else {
-        showLoginScreen();
       }
     })
     .catch((error) => {
-      if (!window.TualekAuth.AUTH_REQUIRED) {
-        window.TualekAuth.loginDemo("ผู้เล่น");
-        enterApp();
-        return;
-      }
-      els.loginStatus.textContent = "โหลดระบบสมาชิกไม่สำเร็จ";
-      showLoginError(error.message);
-      els.demoLogin.hidden = false;
+      window.TualekAuth.loginDemo("ผู้เล่น");
+      enterApp();
+      console.error(error);
     });
 
   updateDifficultyUi();

@@ -301,6 +301,80 @@ body {
   white-space: nowrap;
 }
 
+.online-profile {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 14px;
+  padding: 12px;
+  border: 2px dashed var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.online-profile-avatar-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.online-avatar-preview,
+.online-avatar-fallback,
+.mini-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--line);
+  flex: 0 0 auto;
+  background: #fff;
+}
+
+.online-avatar-fallback,
+.mini-avatar-fallback {
+  display: inline-grid;
+  place-items: center;
+  font-weight: 700;
+  color: var(--heading);
+  background: var(--choice-on);
+}
+
+.mini-avatar,
+.mini-avatar-fallback {
+  width: 32px;
+  height: 32px;
+  font-size: 0.85rem;
+}
+
+.online-avatar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.online-avatar-actions .btn {
+  min-height: 40px;
+  padding: 6px 12px;
+  font-size: 0.9rem;
+}
+
+.player-item-main {
+  flex: 1;
+  font-weight: 600;
+  min-width: 0;
+}
+
+.lb-avatar {
+  width: 28px;
+  height: 28px;
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 2px solid var(--line);
+  color: var(--heading);
+}
+
 .online-lobby-box {
   margin-top: 12px;
   margin-bottom: 4px;
@@ -730,9 +804,48 @@ html[data-age-theme="senior"] .dot-grid {
   padding: 10px 12px;
 }
 
+.login-sheet #login-status {
+  margin-bottom: 16px;
+}
+
+.login-sheet #login-error {
+  margin-bottom: 12px;
+}
+
+.login-sheet #login-error[hidden] {
+  display: none !important;
+  margin: 0;
+  min-height: 0;
+  padding: 0;
+}
+
 .login-actions {
   display: grid;
   gap: 10px;
+  margin-top: 4px;
+  position: relative;
+  z-index: 1;
+}
+
+.login-provider-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  background: #fff !important;
+  color: var(--heading) !important;
+  background-image: none !important;
+}
+
+.login-provider-icon {
+  flex: 0 0 auto;
+  display: block;
+}
+
+.login-back-btn {
+  width: 100%;
+  margin-top: 12px;
 }
 
 .demo-login {
