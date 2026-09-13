@@ -119,6 +119,69 @@ function initFirebaseAdmin() {
 
 initFirebaseAdmin();
 
+const DELETE_REQUESTS_FILE = path.join(__dirname, "data", "delete-requests.json");
+const memoryDeleteRequests = [];
+
+function ensureDeleteRequestStore() {
+  const dir = path.dirname(DELETE_REQUESTS_FILE);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  if (!fs.existsSync(DELETE_REQUESTS_FILE)) {
+    fs.writeFileSync(DELETE_REQUESTS_FILE, "[]", "utf8");
+  }
+}
+
+function appendLocalDeleteRequest(row) {
+  try {
+    ensureDeleteRequestStore();
+    const raw = fs.readFileSync(DELETE_REQUESTS_FILE, "utf8");
+    const list = JSON.parse(raw || "[]");
+    list.push(row);
+    fs.writeFileSync(DELETE_REQUESTS_FILE, JSON.stringify(list, null, 2), "utf8");
+  } catch (error) {
+    console.error("save local delete request failed:", error.message);
+  }
+}
+
+async function saveDeleteRequest(body = {}) {
+  const displayName = String(body.displayName || "").trim().slice(0, 40);
+  const email = String(body.email || "").trim().slice(0, 120).toLowerCase();
+  const note = String(body.note || "").trim().slice(0, 500);
+  if (!displayName || !email || !email.includes("@")) {
+    const err = new Error("กรุณาใส่ชื่อและอีเมลให้ครบ");
+    err.status = 400;
+    throw err;
+  }
+
+  const id = `del_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const row = {
+    id,
+    displayName,
+    email,
+    note,
+    status: "pending",
+    createdAt: new Date().toISOString(),
+  };
+
+  memoryDeleteRequests.unshift(row);
+  if (memoryDeleteRequests.length > 200) memoryDeleteRequests.length = 200;
+  appendLocalDeleteRequest(row);
+  console.log("DELETE REQUEST:", JSON.stringify(row));
+
+  if (db) {
+    try {
+      await db.collection("deleteRequests").doc(id).set({
+        ...row,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAtIso: row.createdAt,
+      });
+    } catch (error) {
+      console.error("save firestore delete request failed:", error.message);
+    }
+  }
+
+  return row;
+}
+
 function getFirebaseWebConfig() {
   // env บน Render ถ้าไม่มี ให้ client ใช้ firebase-config.js ต่อ
   return {
@@ -1331,6 +1394,18 @@ const server = http.createServer(async (req, res) => {
     } catch (error) {
       console.error(error);
       sendJson(res, 500, { error: "failed" });
+    }
+    return;
+  }
+
+  if (urlPath === "/api/delete-request" && method === "POST") {
+    try {
+      const body = await readBody(req);
+      const row = await saveDeleteRequest(body);
+      sendJson(res, 200, { ok: true, id: row.id });
+    } catch (error) {
+      const status = error.status || 500;
+      sendJson(res, status, { error: error.message || "failed" });
     }
     return;
   }

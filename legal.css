@@ -67,6 +67,21 @@
   justify-content: center;
 }
 
+.delete-form {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.delete-form .label {
+  margin-top: 6px;
+}
+
+.delete-note {
+  min-height: 88px;
+  resize: vertical;
+}
+
 @media (max-width: 560px) {
   .legal-wrap {
     margin-top: 16px;

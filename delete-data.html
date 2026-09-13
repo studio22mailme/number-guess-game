@@ -25,17 +25,29 @@
       <p class="legal-meta">อัปเดตล่าสุด: 13 กันยายน 2026</p>
 
       <p>
-        หน้านี้ใช้สำหรับผู้เล่นเกมท้ายตัวเลข (Tualek) ที่ต้องการให้ลบข้อมูลบัญชีและสถิติที่เกี่ยวข้อง
-        รวมถึงข้อมูลที่ได้จากการล็อกอิน Google หรือ Facebook
+        กรอกแบบฟอร์มด้านล่างเพื่อส่งคำขอลบข้อมูลบัญชีและสถิติของเกมท้ายตัวเลข (Tualek)
+        คำขอจะถูกบันทึกในระบบให้ผู้ดูแลดำเนินการภายใน 7 วันทำการ
       </p>
 
-      <h2>วิธีขอให้ลบข้อมูล</h2>
-      <ol>
-        <li>ส่งอีเมลมาที่ <a href="mailto:studio22mailme@gmail.com?subject=Tualek%20Delete%20My%20Data">studio22mailme@gmail.com</a></li>
-        <li>หัวข้ออีเมล: <strong>Tualek Delete My Data</strong></li>
-        <li>แจ้งชื่อที่แสดงในเกม และอีเมลที่ใช้ล็อกอิน (Google/Facebook)</li>
-        <li>เรายืนยันตัวตน แล้วจะลบข้อมูลบัญชี/สถิติที่เกี่ยวข้องภายใน 7 วันทำการ</li>
-      </ol>
+      <h2>ส่งคำขอลบข้อมูล</h2>
+      <form id="delete-form" class="delete-form">
+        <label class="label" for="delete-name">ชื่อที่แสดงในเกม</label>
+        <input id="delete-name" class="full-input" type="text" maxlength="40" required placeholder="เช่น studio22" autocomplete="nickname" />
+
+        <label class="label" for="delete-email">อีเมลที่ใช้ล็อกอิน (Google/Facebook)</label>
+        <input id="delete-email" class="full-input" type="email" maxlength="120" required placeholder="you@email.com" autocomplete="email" />
+
+        <label class="label" for="delete-note">รายละเอียดเพิ่มเติม (ไม่บังคับ)</label>
+        <textarea id="delete-note" class="full-input delete-note" maxlength="500" rows="3" placeholder="เช่น ล็อกอินด้วย Facebook"></textarea>
+
+        <p id="delete-status" class="hint-block" hidden></p>
+        <p id="delete-error" class="error" hidden></p>
+
+        <div class="legal-actions">
+          <button type="submit" id="delete-submit" class="btn btn-start">ส่งคำขอลบข้อมูล</button>
+          <button type="button" id="copy-admin-email" class="btn btn-ink">คัดลอกอีเมลผู้ดูแล</button>
+        </div>
+      </form>
 
       <h2>ข้อมูลที่จะถูกลบ</h2>
       <ul>
@@ -47,22 +59,74 @@
       <h2>สิ่งที่คุณลบเองได้ทันที</h2>
       <ul>
         <li>ออกจากระบบในเกม</li>
-        <li>ล้างข้อมูลเว็บไซต์/คุกกี้ของ <code>tualek.onrender.com</code> ในเบราว์เซอร์ เพื่อลบการตั้งค่าในเครื่อง</li>
-        <li>เพิกถอนสิทธิ์แอปจากหน้าตั้งค่าบัญชี Google หรือ Facebook ของคุณ</li>
+        <li>ล้างข้อมูลเว็บไซต์/คุกกี้ของ <code>tualek.onrender.com</code> ในเบราว์เซอร์</li>
+        <li>เพิกถอนสิทธิ์แอปจากหน้าตั้งค่าบัญชี Google หรือ Facebook</li>
       </ul>
 
-      <h2>หมายเหตุ</h2>
-      <p>
-        ข้อมูลที่อยู่ในบันทึกระบบชั่วคราวหรือสำรองเพื่อความปลอดภัยอาจยังคงอยู่ช่วงสั้นๆ
-        ก่อนถูกลบตามรอบปกติของระบบโฮสต์
-      </p>
-
       <p class="legal-actions">
-        <a class="btn btn-start" href="mailto:studio22mailme@gmail.com?subject=Tualek%20Delete%20My%20Data">ส่งคำขอลบข้อมูล</a>
         <a class="btn btn-ink" href="/privacy.html">นโยบายความเป็นส่วนตัว</a>
         <a class="btn btn-ghost" href="/">กลับไปเล่นเกม</a>
       </p>
     </article>
   </main>
+
+  <script>
+    (() => {
+      const ADMIN_EMAIL = "studio22mailme@gmail.com";
+      const form = document.getElementById("delete-form");
+      const statusEl = document.getElementById("delete-status");
+      const errorEl = document.getElementById("delete-error");
+      const submitBtn = document.getElementById("delete-submit");
+
+      function showStatus(message) {
+        statusEl.hidden = !message;
+        statusEl.textContent = message || "";
+      }
+      function showError(message) {
+        errorEl.hidden = !message;
+        errorEl.textContent = message || "";
+      }
+
+      document.getElementById("copy-admin-email").addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(ADMIN_EMAIL);
+          showStatus("คัดลอกอีเมลผู้ดูแลแล้ว: " + ADMIN_EMAIL);
+          showError("");
+        } catch {
+          showStatus("อีเมลผู้ดูแล: " + ADMIN_EMAIL);
+        }
+      });
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        showError("");
+        showStatus("กำลังส่งคำขอ…");
+        submitBtn.disabled = true;
+        const payload = {
+          displayName: document.getElementById("delete-name").value.trim(),
+          email: document.getElementById("delete-email").value.trim(),
+          note: document.getElementById("delete-note").value.trim(),
+        };
+        try {
+          const res = await fetch("/api/delete-request", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            throw new Error(data.error || "ส่งคำขอไม่สำเร็จ");
+          }
+          showStatus("บันทึกคำขอแล้ว · ผู้ดูแลจะดำเนินการภายใน 7 วันทำการ (รหัสอ้างอิง: " + (data.id || "-") + ")");
+          form.reset();
+        } catch (error) {
+          showStatus("");
+          showError(error.message || "ส่งคำขอไม่สำเร็จ");
+        } finally {
+          submitBtn.disabled = false;
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
