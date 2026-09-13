@@ -133,7 +133,7 @@
     appVersion: document.getElementById("app-version"),
   };
 
-  const APP_VERSION = window.TUALEK_VERSION || "1.2.00";
+  const APP_VERSION = window.TUALEK_VERSION || "1.2.01";
   if (els.appVersion) els.appVersion.textContent = `V${APP_VERSION}`;
 
   const DIFFICULTY_TITLE = {

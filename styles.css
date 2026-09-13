@@ -332,19 +332,14 @@ body {
 }
 
 .app-version {
-  position: fixed;
-  z-index: 15;
-  left: 50%;
-  bottom: max(6px, env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-  margin: 0;
-  padding: 0 8px;
+  margin: 10px 0 4px;
+  padding: 0 4px;
+  text-align: center;
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--muted);
   opacity: 0.72;
-  pointer-events: none;
   user-select: none;
 }
 
@@ -556,6 +551,13 @@ html[data-age-theme="senior"] .dot-grid {
   align-items: center;
   justify-content: center;
   padding: 16px 12px 24px;
+  gap: 8px;
+}
+
+.desk > .app-version {
+  width: min(720px, 100%);
+  margin-top: 4px;
+  flex: 0 0 auto;
 }
 
 .screen {
