@@ -12,6 +12,7 @@
     demo: false,
     db: null,
     auth: null,
+    skipGuestOnSignOut: false,
   };
 
   function isConfigReady(config) {
@@ -85,19 +86,21 @@
 
     Auth.auth.onAuthStateChanged(async (user) => {
       if (user) {
+        Auth.skipGuestOnSignOut = false;
         Auth.user = user;
         Auth.demo = false;
         await ensureUserDoc(user);
         window.dispatchEvent(new CustomEvent("auth-changed", { detail: { user } }));
         return;
       }
-      if (AUTH_REQUIRED) {
+      if (AUTH_REQUIRED || Auth.skipGuestOnSignOut) {
+        Auth.skipGuestOnSignOut = false;
         Auth.user = null;
         Auth.demo = false;
         window.dispatchEvent(new CustomEvent("auth-changed", { detail: { user: null } }));
         return;
       }
-      // ออกจากระบบจริง → กลับเป็นแขกสำหรับโหมดคนเดียว/ส่งเครื่อง
+      // ยังไม่เคยล็อกอินจริง → เล่นแขกสำหรับโหมดคนเดียว/ส่งเครื่อง
       loginDemo("ผู้เล่น");
     });
 
@@ -199,17 +202,22 @@
   }
 
   async function logout() {
+    Auth.skipGuestOnSignOut = true;
     if (Auth.demo) {
       Auth.user = null;
       Auth.demo = false;
-      if (!AUTH_REQUIRED) {
-        loginDemo("ผู้เล่น");
-        return;
-      }
+      Auth.skipGuestOnSignOut = false;
       window.dispatchEvent(new CustomEvent("auth-changed", { detail: { user: null } }));
       return;
     }
-    if (Auth.auth) await Auth.auth.signOut();
+    if (Auth.auth) {
+      await Auth.auth.signOut();
+      return;
+    }
+    Auth.user = null;
+    Auth.demo = false;
+    Auth.skipGuestOnSignOut = false;
+    window.dispatchEvent(new CustomEvent("auth-changed", { detail: { user: null } }));
   }
 
   async function getIdToken() {

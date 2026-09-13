@@ -139,7 +139,7 @@
     appVersion: document.getElementById("app-version"),
   };
 
-  const APP_VERSION = window.TUALEK_VERSION || "1.3.06";
+  const APP_VERSION = window.TUALEK_VERSION || "1.3.07";
   if (els.appVersion) els.appVersion.textContent = `V${APP_VERSION}`;
 
   const DIFFICULTY_TITLE = {
@@ -2116,7 +2116,8 @@
       : "ยังตั้งค่า Firebase ไม่ครบ · ตั้งค่าบน Render ตาม README";
     els.loginActions.hidden = !configured;
     els.demoLogin.hidden = configured;
-    if (els.loginBackBtn) els.loginBackBtn.hidden = !window.TualekAuth.AUTH_REQUIRED;
+    // หลังออกจากระบบ หรือบังคับล็อกอิน → ให้กลับหน้าตั้งค่า (เล่นแขก) ได้
+    if (els.loginBackBtn) els.loginBackBtn.hidden = false;
     showLoginError("");
   }
 
@@ -2501,16 +2502,15 @@
       setup.mode = "solo";
       setChoiceGroup("[data-mode]", "mode", "solo");
       showSetupError("");
-      showScreen("setup");
-      updateSetupVisibility();
+      if (!currentUser()) window.TualekAuth.loginDemo("ผู้เล่น");
+      enterApp();
     });
   }
 
   document.getElementById("logout-btn").addEventListener("click", async () => {
     leaveOnlineRoom();
     await window.TualekAuth.logout();
-    if (window.TualekAuth.AUTH_REQUIRED) showLoginScreen();
-    else enterApp();
+    showLoginScreen();
   });
 
   document.addEventListener("keydown", (event) => {
@@ -2534,13 +2534,15 @@
   });
 
   window.addEventListener("auth-changed", () => {
-    if (currentUser()) enterApp();
-    else if (!window.TualekAuth.AUTH_REQUIRED) {
-      window.TualekAuth.loginDemo("ผู้เล่น");
+    if (window.TualekAuth.isRealUser()) {
       enterApp();
-    } else {
-      showLoginScreen();
+      return;
     }
+    if (!currentUser()) {
+      showLoginScreen();
+      return;
+    }
+    enterApp();
   });
 
   renderPlayerList();
