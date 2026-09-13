@@ -25,7 +25,13 @@ npm start
 ### 2) เปิด Authentication
 1. Authentication → Sign-in method
 2. เปิด **Google**
-3. เปิด **Facebook** (ต้องมี Facebook App ID / App Secret จาก [Meta Developers](https://developers.facebook.com/))
+3. เปิด **Facebook**:
+   - สร้างแอปที่ [Meta Developers](https://developers.facebook.com/) → Add product → Facebook Login
+   - Settings → Basic: คัดลอก **App ID** และ **App Secret**
+   - Facebook Login → Settings → **Valid OAuth Redirect URIs** ใส่:
+     `https://tualek-57216.firebaseapp.com/__/auth/handler`
+   - ใน Firebase เปิด Facebook แล้ววาง App ID / App Secret
+   - สถานะแอป Meta ถ้ายัง Development ต้องเพิ่มตัวเองเป็น Tester ใน Roles
 4. ใส่ Authorized domain: `tualek.onrender.com` และ `localhost`
 
 ### 3) สร้าง Firestore

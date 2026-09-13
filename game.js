@@ -68,21 +68,31 @@
     leaderboardList: document.getElementById("leaderboard-list"),
     playerList: document.getElementById("player-list"),
     playersField: document.getElementById("players-field"),
+    soloNameField: document.getElementById("solo-name-field"),
+    soloNameInput: document.getElementById("solo-name-input"),
     onlineField: document.getElementById("online-field"),
     roomList: document.getElementById("room-list"),
-    onlineNameInput: document.getElementById("online-name-input"),
     onlineHint: document.getElementById("online-hint"),
-    onlineAvatarPreview: document.getElementById("online-avatar-preview"),
-    onlineAvatarFallback: document.getElementById("online-avatar-fallback"),
-    onlineAvatarChangeBtn: document.getElementById("online-avatar-change-btn"),
-    onlineAvatarResetBtn: document.getElementById("online-avatar-reset-btn"),
-    onlineAvatarFile: document.getElementById("online-avatar-file"),
     roomTitleInput: document.getElementById("room-title-input"),
     roomPasswordInput: document.getElementById("room-password-input"),
     joinPasswordInput: document.getElementById("join-password-input"),
     playerNameInput: document.getElementById("player-name-input"),
     roomCodeInput: document.getElementById("room-code-input"),
     addPlayerBtn: document.getElementById("add-player-btn"),
+    profileEdit: document.getElementById("profile-edit"),
+    profileEditBtn: document.getElementById("profile-edit-btn"),
+    profileNameInput: document.getElementById("profile-name-input"),
+    profileAvatarPreview: document.getElementById("profile-avatar-preview"),
+    profileAvatarFallback: document.getElementById("profile-avatar-fallback"),
+    profileAvatarChangeBtn: document.getElementById("profile-avatar-change-btn"),
+    profileAvatarResetBtn: document.getElementById("profile-avatar-reset-btn"),
+    profileAvatarFile: document.getElementById("profile-avatar-file"),
+    profileEditCancel: document.getElementById("profile-edit-cancel"),
+    profileEditSave: document.getElementById("profile-edit-save"),
+    profileEditError: document.getElementById("profile-edit-error"),
+    logoutBtn: document.getElementById("logout-btn"),
+    userBar: document.getElementById("user-bar"),
+    userNote: document.querySelector(".user-note"),
     roundsField: document.getElementById("rounds-field"),
     roundsLabel: document.getElementById("rounds-label"),
     limitChoices: document.getElementById("limit-choices"),
@@ -139,7 +149,7 @@
     appVersion: document.getElementById("app-version"),
   };
 
-  const APP_VERSION = window.TUALEK_VERSION || "1.3.07";
+  const APP_VERSION = window.TUALEK_VERSION || "1.3.08";
   if (els.appVersion) els.appVersion.textContent = `V${APP_VERSION}`;
 
   const DIFFICULTY_TITLE = {
@@ -200,7 +210,7 @@
         JSON.stringify({
           code: online.code,
           playerId: online.you?.id || null,
-          name: online.you?.name || els.onlineNameInput?.value || "ผู้เล่น",
+          name: online.you?.name || getDisplayName() || "ผู้เล่น",
           password: online.password || "",
           difficulty: online.difficulty || "normal",
           savedAt: Date.now(),
@@ -248,7 +258,7 @@
           limitRounds: setup.limitRounds,
           names: setup.names,
           rounds: els.roundsInput?.value || "10",
-          onlineName: els.onlineNameInput?.value || "",
+          soloName: els.soloNameInput?.value || "",
           roomTitle: els.roomTitleInput?.value || "",
           roomCode: els.roomCodeInput?.value || "",
           savedAt: Date.now(),
@@ -287,7 +297,9 @@
         renderPlayerList();
       }
       if (els.roundsInput && data.rounds) els.roundsInput.value = data.rounds;
-      if (els.onlineNameInput && data.onlineName) els.onlineNameInput.value = data.onlineName;
+      if (els.soloNameInput && (data.soloName || data.onlineName)) {
+        els.soloNameInput.value = data.soloName || data.onlineName || "";
+      }
       if (els.roomTitleInput && data.roomTitle) els.roomTitleInput.value = data.roomTitle;
       if (els.roomCodeInput && data.roomCode) els.roomCodeInput.value = data.roomCode;
     } catch {
@@ -610,8 +622,11 @@
   function updateSetupVisibility() {
     const isMulti = setup.mode === "multi";
     const isOnline = setup.mode === "online";
+    const isSolo = setup.mode === "solo";
+    const real = isRealUser();
 
     els.playersField.hidden = !isMulti;
+    if (els.soloNameField) els.soloNameField.hidden = !(isSolo && !real);
     els.onlineField.hidden = !isOnline;
     els.repeatField.hidden = false;
     els.limitChoices.hidden = false;
@@ -623,10 +638,8 @@
     if (isOnline) {
       els.startBtn.textContent = "เข้าห้อง / สร้างห้อง";
       if (els.onlineHint) {
-        els.onlineHint.hidden = false;
-        els.onlineHint.textContent = isRealUser()
-          ? "ล็อกอินแล้ว · พร้อมเล่นโหมดคนละเครื่อง"
-          : "ต้องล็อกอินด้วย Google หรือ Facebook";
+        els.onlineHint.hidden = real;
+        els.onlineHint.textContent = "ต้องล็อกอินด้วย Google หรือ Facebook";
       }
       updateTimePreview();
       ensureSocket()
@@ -744,15 +757,12 @@
       els.leaderboardList.innerHTML = rows
         .map((row) => {
           const wins = Number(row.wins) || 0;
-          const minutes = Number(row.minutes) || 0;
-          const avg = wins > 0 ? Math.max(1, Math.round(minutes / wins)) : 0;
-          const timeText = wins ? ` · เฉลี่ย ${avg} นาที/เกม` : "";
           return `
           <li class="leaderboard-item">
             <span class="lb-rank">#${row.rank}</span>
             ${avatarMarkup(row.photoURL, row.name, "lb-avatar")}
             <span class="lb-name">${escapeHtml(row.name)}</span>
-            <span class="lb-wins">${wins} ชนะ${timeText}</span>
+            <span class="lb-wins">${wins} ชนะ</span>
           </li>`;
         })
         .join("");
@@ -779,7 +789,7 @@
           mode,
           difficulty: game?.difficulty || setup.difficulty || "normal",
           durationMinutes: gameDurationMinutes(),
-          displayName: user.displayName || "ผู้เล่น",
+          displayName: getDisplayName(),
           photoURL: getProfilePhoto() || user.photoURL || "",
         }),
       });
@@ -791,7 +801,7 @@
 
   function collectSettings() {
     if (setup.mode === "online") {
-      const name = (els.onlineNameInput?.value || "").trim().slice(0, 20);
+      const name = getDisplayName().trim().slice(0, 20);
       const code = els.roomCodeInput.value.trim().toUpperCase();
       const roomName = els.roomTitleInput.value.trim().slice(0, 24);
       const password = els.roomPasswordInput.value;
@@ -807,9 +817,8 @@
       }
 
       if (!name) {
-        return { error: "กรุณาใส่ชื่อของคุณในห้อง" };
+        return { error: "กรุณาตั้งชื่อในโปรไฟล์ก่อน" };
       }
-      saveProfileName(name);
       const photoURL = getProfilePhoto();
 
       if (code) {
@@ -841,11 +850,19 @@
       };
     }
 
-    const user = currentUser();
-    const names =
-      setup.mode === "solo"
-        ? [user?.displayName || "ผู้เล่น"]
-        : setup.names.map((name) => name.trim()).filter(Boolean);
+    let names;
+    if (setup.mode === "solo") {
+      if (isRealUser()) {
+        names = [getDisplayName()];
+      } else {
+        const name = (els.soloNameInput?.value || "").trim().slice(0, 20);
+        if (!name) return { error: "กรุณาใส่ชื่อของคุณ" };
+        names = [name];
+      }
+    } else {
+      // โหมดส่งเครื่อง: บังคับกรอกชื่อเอง · ไม่ใช้ชื่อล็อกอิน
+      names = setup.names.map((name) => name.trim()).filter(Boolean);
+    }
 
     if (setup.mode === "multi" && names.length < 2) {
       return { error: "แข่งกับเพื่อนต้องมีอย่างน้อย 2 คน" };
@@ -1412,9 +1429,7 @@
       const found = game.players.findIndex((p) => p.id === online.you.id || p.name === online.you.name);
       reviewIndex = found >= 0 ? found : 0;
     } else if (game.mode === "multi") {
-      const myName = currentUser()?.displayName;
-      const found = myName ? game.players.findIndex((p) => p.name === myName) : -1;
-      reviewIndex = found >= 0 ? found : Math.max(0, game.winnerIndex ?? 0);
+      reviewIndex = Math.max(0, game.winnerIndex ?? 0);
     } else {
       reviewIndex = 0;
     }
@@ -1895,12 +1910,14 @@
   function renderUserBar() {
     const user = currentUser();
     if (!user) return;
-    els.userName.textContent = user.displayName || "ผู้เล่น";
-    if (user.photoURL) {
-      els.userAvatar.src = user.photoURL;
+    els.userName.textContent = getDisplayName();
+    const photo = getProfilePhoto();
+    if (photo) {
+      els.userAvatar.src = photo;
       els.userAvatar.hidden = false;
     } else {
       els.userAvatar.hidden = true;
+      els.userAvatar.removeAttribute("src");
     }
   }
 
@@ -1933,6 +1950,12 @@
     }
   }
 
+  function getDisplayName() {
+    const saved = getSavedProfileName().trim();
+    if (saved) return saved.slice(0, 20);
+    return (currentUser()?.displayName || "ผู้เล่น").trim().slice(0, 20) || "ผู้เล่น";
+  }
+
   function saveProfileName(name) {
     try {
       localStorage.setItem(profileKey("name"), String(name || "").trim().slice(0, 20));
@@ -1958,28 +1981,60 @@
     return `<span class="mini-avatar mini-avatar-fallback ${extraClass}" aria-hidden="true">${label}</span>`;
   }
 
-  function syncOnlineProfileUi() {
-    if (!els.onlineNameInput) return;
-    const saved = getSavedProfileName();
-    const fromUser = currentUser()?.displayName || "";
-    if (!els.onlineNameInput.value.trim()) {
-      els.onlineNameInput.value = saved || fromUser || "";
+  function showProfileError(message) {
+    if (!els.profileEditError) return;
+    if (!message) {
+      els.profileEditError.hidden = true;
+      els.profileEditError.textContent = "";
+      return;
     }
+    els.profileEditError.hidden = false;
+    els.profileEditError.textContent = message;
+  }
+
+  function syncProfileEditUi() {
+    const name = getDisplayName();
+    if (els.profileNameInput) els.profileNameInput.value = name;
     const photo = getProfilePhoto();
-    if (els.onlineAvatarPreview) {
+    if (els.profileAvatarPreview) {
       if (photo) {
-        els.onlineAvatarPreview.src = photo;
-        els.onlineAvatarPreview.hidden = false;
-        if (els.onlineAvatarFallback) els.onlineAvatarFallback.hidden = true;
+        els.profileAvatarPreview.src = photo;
+        els.profileAvatarPreview.hidden = false;
+        if (els.profileAvatarFallback) els.profileAvatarFallback.hidden = true;
       } else {
-        els.onlineAvatarPreview.hidden = true;
-        els.onlineAvatarPreview.removeAttribute("src");
-        if (els.onlineAvatarFallback) {
-          els.onlineAvatarFallback.hidden = false;
-          els.onlineAvatarFallback.textContent = (els.onlineNameInput.value || fromUser || "?").trim().slice(0, 1) || "?";
+        els.profileAvatarPreview.hidden = true;
+        els.profileAvatarPreview.removeAttribute("src");
+        if (els.profileAvatarFallback) {
+          els.profileAvatarFallback.hidden = false;
+          els.profileAvatarFallback.textContent = (name || "?").trim().slice(0, 1) || "?";
         }
       }
     }
+    showProfileError("");
+  }
+
+  function openProfileEdit() {
+    if (!isRealUser() || !els.profileEdit) return;
+    syncProfileEditUi();
+    els.profileEdit.hidden = false;
+  }
+
+  function closeProfileEdit() {
+    if (els.profileEdit) els.profileEdit.hidden = true;
+    showProfileError("");
+  }
+
+  function saveProfileEdit() {
+    const name = (els.profileNameInput?.value || "").trim().slice(0, 20);
+    if (!name) {
+      showProfileError("กรุณาใส่ชื่อ");
+      return;
+    }
+    saveProfileName(name);
+    const user = currentUser();
+    if (user) user.displayName = name;
+    renderUserBar();
+    closeProfileEdit();
   }
 
   function compressImageFile(file) {
@@ -2043,20 +2098,11 @@
 
   function enterApp() {
     renderUserBar();
-    const logoutBtn = document.getElementById("logout-btn");
-    const userNote = document.querySelector(".user-note");
-    const userBar = document.querySelector(".user-bar");
     const real = isRealUser();
 
-    if (real) {
-      if (logoutBtn) logoutBtn.hidden = false;
-      if (userNote) userNote.textContent = "ล็อกอินแล้ว · ใช้โหมดคนละเครื่องได้";
-      if (userBar) userBar.hidden = false;
-    } else {
-      if (logoutBtn) logoutBtn.hidden = true;
-      if (userNote) userNote.textContent = "เล่นแบบแขก · คนละเครื่องต้องล็อกอิน";
-      if (userBar) userBar.hidden = true;
-    }
+    if (els.logoutBtn) els.logoutBtn.hidden = !real;
+    if (els.userBar) els.userBar.hidden = !real;
+    if (els.userNote) els.userNote.textContent = "ล็อกอินแล้ว";
 
     restoreSetupSession();
 
@@ -2104,7 +2150,6 @@
       })
       .catch(() => {});
     if (window.TualekMusic?.start) window.TualekMusic.start().catch(() => {});
-    syncOnlineProfileUi();
     saveSetupSession();
   }
 
@@ -2131,7 +2176,6 @@
           saveSetupSession();
           return;
         }
-        syncOnlineProfileUi();
       }
       updateSetupVisibility();
       saveSetupSession();
@@ -2202,41 +2246,53 @@
     saveSetupSession();
   });
 
-  [els.onlineNameInput, els.roomTitleInput].forEach((input) => {
+  [els.soloNameInput, els.roomTitleInput].forEach((input) => {
     if (!input) return;
     input.addEventListener("input", () => {
-      if (input === els.onlineNameInput) {
-        saveProfileName(input.value);
-        if (els.onlineAvatarFallback && els.onlineAvatarPreview?.hidden) {
-          els.onlineAvatarFallback.textContent = (input.value || "?").trim().slice(0, 1) || "?";
-        }
-      }
       saveSetupSession();
     });
   });
 
-  if (els.onlineAvatarChangeBtn && els.onlineAvatarFile) {
-    els.onlineAvatarChangeBtn.addEventListener("click", () => els.onlineAvatarFile.click());
-    els.onlineAvatarFile.addEventListener("change", async () => {
-      const file = els.onlineAvatarFile.files?.[0];
-      els.onlineAvatarFile.value = "";
+  if (els.profileEditBtn) {
+    els.profileEditBtn.addEventListener("click", () => openProfileEdit());
+  }
+  if (els.profileEditCancel) {
+    els.profileEditCancel.addEventListener("click", () => closeProfileEdit());
+  }
+  if (els.profileEditSave) {
+    els.profileEditSave.addEventListener("click", () => saveProfileEdit());
+  }
+  if (els.profileAvatarChangeBtn && els.profileAvatarFile) {
+    els.profileAvatarChangeBtn.addEventListener("click", () => els.profileAvatarFile.click());
+    els.profileAvatarFile.addEventListener("change", async () => {
+      const file = els.profileAvatarFile.files?.[0];
+      els.profileAvatarFile.value = "";
       if (!file) return;
       try {
-        showSetupError("");
+        showProfileError("");
         const dataUrl = await compressImageFile(file);
         saveCustomAvatar(dataUrl);
-        syncOnlineProfileUi();
+        syncProfileEditUi();
+        renderUserBar();
       } catch (error) {
-        showSetupError(error.message || "เปลี่ยนรูปไม่สำเร็จ");
+        showProfileError(error.message || "เปลี่ยนรูปไม่สำเร็จ");
       }
     });
   }
-
-  if (els.onlineAvatarResetBtn) {
-    els.onlineAvatarResetBtn.addEventListener("click", () => {
+  if (els.profileAvatarResetBtn) {
+    els.profileAvatarResetBtn.addEventListener("click", () => {
       saveCustomAvatar("");
-      syncOnlineProfileUi();
-      showSetupError("");
+      syncProfileEditUi();
+      renderUserBar();
+      showProfileError("");
+    });
+  }
+  if (els.profileNameInput) {
+    els.profileNameInput.addEventListener("input", () => {
+      if (els.profileAvatarFallback && els.profileAvatarPreview?.hidden) {
+        els.profileAvatarFallback.textContent =
+          (els.profileNameInput.value || "?").trim().slice(0, 1) || "?";
+      }
     });
   }
 
@@ -2462,12 +2518,31 @@
   });
 
   function friendlyAuthError(error) {
+    const code = String(error?.code || "");
     const raw = String(error?.message || error || "");
     if (
       location.protocol === "file:" ||
       /operation-not-supported-in-this-environment|location\.protocol/i.test(raw)
     ) {
       return "เปิดเกมผ่าน http://localhost:3000 เท่านั้น (อย่าดับเบิลคลิกไฟล์ index.html) · ในโฟลเดอร์โปรเจกต์รัน npm start แล้วค่อยเปิดเบราว์เซอร์";
+    }
+    if (code === "auth/operation-not-allowed") {
+      return "ยังไม่ได้เปิด Facebook ใน Firebase Console → Authentication → Sign-in method";
+    }
+    if (code === "auth/unauthorized-domain") {
+      return "โดเมนนี้ยังไม่อนุญาตใน Firebase → Authentication → Settings → Authorized domains";
+    }
+    if (code === "auth/account-exists-with-different-credential") {
+      return "อีเมลนี้ล็อกอินด้วย Google ไว้แล้ว · ใช้ Google หรือใช้บัญชี Facebook อื่น";
+    }
+    if (code === "auth/popup-blocked") {
+      return "เบราว์เซอร์บล็อกป๊อปอัป · อนุญาตป๊อปอัปแล้วลองใหม่";
+    }
+    if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
+      return "ปิดหน้าต่างล็อกอินก่อนเสร็จ · ลองใหม่ได้";
+    }
+    if (/facebook|OAuth|app.?id|app.?secret/i.test(raw) && /invalid|error|fail/i.test(raw)) {
+      return "ตั้งค่า Facebook App ยังไม่ครบ · ใส่ App ID/Secret ใน Firebase และ Valid OAuth Redirect URIs ใน Meta Developers";
     }
     return raw || "ล็อกอินไม่สำเร็จ";
   }
@@ -2508,6 +2583,7 @@
   }
 
   document.getElementById("logout-btn").addEventListener("click", async () => {
+    closeProfileEdit();
     leaveOnlineRoom();
     await window.TualekAuth.logout();
     showLoginScreen();

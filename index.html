@@ -90,13 +90,15 @@
           <p class="tagline" id="setup-tagline">ฝึกสมองเล่นสนุกคนเดียวและแข่งกับเพื่อน</p>
         </header>
 
-        <div class="user-bar">
+        <button type="button" id="logout-btn" class="logout-corner" hidden title="ออกจากระบบ">ออก</button>
+
+        <div class="user-bar" id="user-bar" hidden>
           <img id="user-avatar" class="user-avatar" alt="" hidden />
           <div class="user-meta">
             <p id="user-name" class="user-name">ผู้เล่น</p>
             <p class="user-note">ล็อกอินแล้ว</p>
           </div>
-          <button type="button" id="logout-btn" class="btn btn-ink user-logout">ออก</button>
+          <button type="button" id="profile-edit-btn" class="btn btn-ink user-edit-btn">แก้ไข</button>
         </div>
 
         <div class="field music-field">
@@ -153,6 +155,11 @@
           <p id="time-preview" class="hint-block" hidden></p>
         </div>
 
+        <div class="field" id="solo-name-field" hidden>
+          <label class="label" for="solo-name-input">ชื่อของคุณ</label>
+          <input id="solo-name-input" class="full-input" type="text" maxlength="20" placeholder="ใส่ชื่อที่จะแสดงในเกม" value="" autocomplete="nickname" />
+        </div>
+
         <div class="field" id="players-field" hidden>
           <p class="label">ชื่อผู้เล่น <span class="hint">อย่างน้อย 2 คน · กระดาษแยกกัน · เล่นเครื่องเดียวกัน</span></p>
           <ul id="player-list" class="player-list"></ul>
@@ -163,20 +170,7 @@
         </div>
 
         <div class="field" id="online-field" hidden>
-          <p id="online-hint" class="hint-block">ต้องล็อกอินด้วย Google หรือ Facebook</p>
-          <div class="online-profile" id="online-profile">
-            <div class="online-profile-avatar-wrap">
-              <img id="online-avatar-preview" class="online-avatar-preview" alt="" hidden />
-              <span id="online-avatar-fallback" class="online-avatar-fallback" aria-hidden="true">?</span>
-              <div class="online-avatar-actions">
-                <button type="button" id="online-avatar-change-btn" class="btn btn-ink">เปลี่ยนรูป</button>
-                <button type="button" id="online-avatar-reset-btn" class="btn btn-ghost">ใช้รูปโปรไฟล์</button>
-              </div>
-              <input id="online-avatar-file" type="file" accept="image/*" hidden />
-            </div>
-            <label class="label" for="online-name-input">ชื่อของคุณในห้อง</label>
-            <input id="online-name-input" class="full-input" type="text" maxlength="20" placeholder="ใส่ชื่อที่จะแสดง" value="" autocomplete="nickname" />
-          </div>
+          <p id="online-hint" class="hint-block" hidden>ต้องล็อกอินด้วย Google หรือ Facebook</p>
 
           <div class="online-lobby-box" id="online-lobby-box">
             <p class="label lobby-box-title">ล็อบบี้ห้องออนไลน์</p>
@@ -332,7 +326,7 @@
       </article>
     </section>
 
-  <p id="app-version" class="app-version" aria-label="เวอร์ชันแอป">V1.3.07</p>
+  <p id="app-version" class="app-version" aria-label="เวอร์ชันแอป">V1.3.08</p>
   </div>
 
   <div id="confirm-leave" class="confirm-leave" hidden>
@@ -342,6 +336,28 @@
       <div class="confirm-leave-actions">
         <button type="button" id="confirm-leave-cancel" class="btn btn-ink">อยู่ต่อ</button>
         <button type="button" id="confirm-leave-ok" class="btn btn-start">ออกเลย</button>
+      </div>
+    </article>
+  </div>
+
+  <div id="profile-edit" class="confirm-leave" hidden>
+    <article class="confirm-leave-card profile-edit-card" role="dialog" aria-modal="true" aria-labelledby="profile-edit-title">
+      <h2 id="profile-edit-title">แก้ไขโปรไฟล์</h2>
+      <div class="profile-edit-avatar-wrap">
+        <img id="profile-avatar-preview" class="online-avatar-preview" alt="" hidden />
+        <span id="profile-avatar-fallback" class="online-avatar-fallback" aria-hidden="true">?</span>
+        <div class="online-avatar-actions">
+          <button type="button" id="profile-avatar-change-btn" class="btn btn-ink">เปลี่ยนรูป</button>
+          <button type="button" id="profile-avatar-reset-btn" class="btn btn-ghost">ใช้รูปโปรไฟล์</button>
+        </div>
+        <input id="profile-avatar-file" type="file" accept="image/*" hidden />
+      </div>
+      <label class="label" for="profile-name-input">ชื่อที่แสดงในเกม</label>
+      <input id="profile-name-input" class="full-input" type="text" maxlength="20" placeholder="ใส่ชื่อ" autocomplete="nickname" />
+      <p id="profile-edit-error" class="error" hidden></p>
+      <div class="confirm-leave-actions">
+        <button type="button" id="profile-edit-cancel" class="btn btn-ink">ยกเลิก</button>
+        <button type="button" id="profile-edit-save" class="btn btn-start">บันทึก</button>
       </div>
     </article>
   </div>
