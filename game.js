@@ -133,7 +133,7 @@
     appVersion: document.getElementById("app-version"),
   };
 
-  const APP_VERSION = window.TUALEK_VERSION || "1.2.01";
+  const APP_VERSION = window.TUALEK_VERSION || "1.2.02";
   if (els.appVersion) els.appVersion.textContent = `V${APP_VERSION}`;
 
   const DIFFICULTY_TITLE = {
@@ -954,7 +954,8 @@
   function updateKeypadState() {
     document.querySelectorAll(".key[data-digit]").forEach((btn) => {
       const digit = Number(btn.dataset.digit);
-      const alreadyUsed = game.draft.some((value, index) => value === digit && index !== game.caret);
+      // เลขที่อยู่ใน draft แล้วต้องเทาทั้งหมด (รวมช่องสุดท้ายที่ caret ยังอยู่)
+      const alreadyUsed = game.draft.some((value) => value === digit);
       btn.disabled = !game.allowRepeat && alreadyUsed;
     });
   }

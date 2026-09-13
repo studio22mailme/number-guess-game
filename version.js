@@ -1,2 +1,2 @@
 /* Single source of truth for the visible app version (must match ประวัติ.md). */
-window.TUALEK_VERSION = "1.2.01";
+window.TUALEK_VERSION = "1.2.02";
