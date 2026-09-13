@@ -1515,8 +1515,8 @@ html[data-age-theme="senior"] .dot-grid {
 }
 
 .quit-btn {
-  display: block;
-  margin: 0 auto;
+  display: inline;
+  margin: 0;
   border: 0;
   background: transparent;
   color: var(--heading);
@@ -1525,6 +1525,19 @@ html[data-age-theme="senior"] .dot-grid {
   text-decoration: underline;
   text-underline-offset: 3px;
   font-weight: 600;
+}
+
+.play-footer-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 4px;
+}
+
+a.privacy-link {
+  color: var(--heading);
 }
 
 .keypad {
