@@ -639,7 +639,7 @@
       els.startBtn.textContent = "เข้าห้อง / สร้างห้อง";
       if (els.onlineHint) {
         els.onlineHint.hidden = real;
-        els.onlineHint.textContent = "ต้องล็อกอินด้วย Google (Facebook ยังไม่พร้อมชั่วคราว)";
+        els.onlineHint.textContent = "ล็อกอินก่อนเข้าโหมดนี้";
       }
       updateTimePreview();
       ensureSocket()
@@ -2088,7 +2088,7 @@
     showScreen("login");
     const configured = window.TualekAuth.state.configured;
     els.loginStatus.textContent = configured
-      ? "ต้องล็อกอินด้วย Google (Facebook ยังไม่พร้อมชั่วคราว)"
+      ? "ล็อกอินก่อนเข้าโหมดนี้"
       : "ยังตั้งค่า Firebase ไม่ครบ · ตั้งค่าบน Render ตาม README ก่อนใช้โหมดคนละเครื่อง";
     els.loginActions.hidden = !configured;
     els.demoLogin.hidden = configured;
