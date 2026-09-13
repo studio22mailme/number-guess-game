@@ -149,7 +149,7 @@
     appVersion: document.getElementById("app-version"),
   };
 
-  const APP_VERSION = window.TUALEK_VERSION || "1.3.13";
+  const APP_VERSION = window.TUALEK_VERSION || "1.3.14";
   if (els.appVersion) els.appVersion.textContent = `V${APP_VERSION}`;
 
   const DIFFICULTY_TITLE = {
@@ -639,7 +639,7 @@
       els.startBtn.textContent = "เข้าห้อง / สร้างห้อง";
       if (els.onlineHint) {
         els.onlineHint.hidden = real;
-        els.onlineHint.textContent = "ต้องล็อกอินด้วย Google หรือ Facebook";
+        els.onlineHint.textContent = "ต้องล็อกอินด้วย Google (Facebook ยังไม่พร้อมชั่วคราว)";
       }
       updateTimePreview();
       ensureSocket()
