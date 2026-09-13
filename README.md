@@ -34,6 +34,14 @@ npm start
    - สถานะแอป Meta ถ้ายัง Development ต้องเพิ่มตัวเองเป็น Tester ใน Roles
 4. ใส่ Authorized domain: `tualek.onrender.com` และ `localhost`
 
+### 2.1) เปิด Facebook ให้คนทั่วไปใช้ได้ (Live)
+1. ใส่ลิงก์ใน Meta → การตั้งค่าแอพ → ข้อมูลพื้นฐาน:
+   - **URL นโยบายความเป็นส่วนตัว** = `https://tualek.onrender.com/privacy.html`
+   - **การลบข้อมูลผู้ใช้** = `https://tualek.onrender.com/delete-data.html`
+2. เลือกหมวดหมู่แอป (เช่น เกม)
+3. ที่แดชบอร์ดแอป Meta สลับจาก **โหมดการพัฒนา → โหมดใช้งานจริง**
+4. ถ้า Meta ขอรายการค้าง ให้ทำตามจนครบ แล้วทดสอบล็อกอินด้วยบัญชีทั่วไป
+
 ### 3) สร้าง Firestore
 1. Firestore Database → สร้างแบบ production หรือ test
 2. แนะนำกฎเริ่มต้นให้อ่านสถิติได้ เขียนผ่านเซิร์ฟเวอร์เท่านั้น:
