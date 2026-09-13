@@ -2088,7 +2088,7 @@
     showScreen("login");
     const configured = window.TualekAuth.state.configured;
     els.loginStatus.textContent = configured
-      ? "ต้องล็อกอินด้วย Google หรือ Facebook"
+      ? "ต้องล็อกอินด้วย Google (Facebook ยังไม่พร้อมชั่วคราว)"
       : "ยังตั้งค่า Firebase ไม่ครบ · ตั้งค่าบน Render ตาม README ก่อนใช้โหมดคนละเครื่อง";
     els.loginActions.hidden = !configured;
     els.demoLogin.hidden = configured;
@@ -2157,7 +2157,7 @@
     showScreen("login");
     const configured = window.TualekAuth.state.configured;
     els.loginStatus.textContent = configured
-      ? "ล็อกอินด้วย Google หรือ Facebook"
+      ? "ล็อกอินด้วย Google (Facebook ยังไม่พร้อมชั่วคราว)"
       : "ยังตั้งค่า Firebase ไม่ครบ · ตั้งค่าบน Render ตาม README";
     els.loginActions.hidden = !configured;
     els.demoLogin.hidden = configured;
@@ -2557,6 +2557,11 @@
   });
 
   document.getElementById("login-facebook-btn").addEventListener("click", async () => {
+    const btn = document.getElementById("login-facebook-btn");
+    if (!btn || btn.disabled) {
+      showLoginError("Facebook ยังไม่พร้อมชั่วคราว · ใช้ Google ก่อนได้");
+      return;
+    }
     showLoginError("");
     try {
       await window.TualekAuth.loginFacebook();

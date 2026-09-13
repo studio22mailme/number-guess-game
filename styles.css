@@ -901,6 +901,22 @@ html[data-age-theme="senior"] .dot-grid {
   display: block;
 }
 
+.login-facebook-disabled,
+#login-facebook-btn:disabled {
+  background: #d7dbe3 !important;
+  color: #6b7280 !important;
+  border-color: #b8c0cc !important;
+  cursor: not-allowed;
+  box-shadow: none;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.login-facebook-disabled .login-provider-icon,
+#login-facebook-btn:disabled .login-provider-icon {
+  opacity: 0.55;
+}
+
 .login-back-btn {
   width: 100%;
   margin-top: 12px;
@@ -2109,14 +2125,14 @@ html[data-age-theme="senior"] .paper td.feedback {
 
 html[data-age-theme="senior"] .online-lobby-box {
   border-width: 3px;
-  background: #f7f4ee;
+  background: rgba(40, 42, 46, 0.14);
 }
 
 html[data-age-theme="child"] .online-lobby-box {
   border-radius: 22px;
-  background: rgba(255, 247, 194, 0.45);
+  background: rgba(36, 48, 68, 0.14);
 }
 
 html[data-age-theme="teen"] .online-lobby-box {
-  background: rgba(224, 242, 254, 0.55);
+  background: rgba(36, 48, 68, 0.16);
 }
