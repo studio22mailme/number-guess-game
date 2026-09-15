@@ -32,14 +32,14 @@ try {
 const PORT = Number(process.env.PORT) || 3000;
 const MAX_PLAYERS = 8;
 const MAX_ROUNDS = 30;
-const DEFAULT_SECONDS_PER_LINE = 120;
+const DEFAULT_SECONDS_PER_LINE = 60;
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const ALLOW_DEMO_AUTH = process.env.ALLOW_DEMO_AUTH !== "0";
 
 const DIFFICULTY = {
-  easy: { id: "easy", digitCount: 4, secondsPerLine: 120, columnFeedback: true, timeoutEnds: false },
-  normal: { id: "normal", digitCount: 4, secondsPerLine: 120, columnFeedback: false, timeoutEnds: false },
-  hard: { id: "hard", digitCount: 5, secondsPerLine: 120, columnFeedback: false, timeoutEnds: false },
+  easy: { id: "easy", digitCount: 4, secondsPerLine: 60, columnFeedback: true, timeoutEnds: false },
+  normal: { id: "normal", digitCount: 4, secondsPerLine: 60, columnFeedback: false, timeoutEnds: false },
+  hard: { id: "hard", digitCount: 5, secondsPerLine: 60, columnFeedback: false, timeoutEnds: false },
   extreme: { id: "extreme", digitCount: 5, secondsPerLine: 30, columnFeedback: false, timeoutEnds: false },
 };
 

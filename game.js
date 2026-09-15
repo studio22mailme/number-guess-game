@@ -1,14 +1,14 @@
 (() => {
   const MAX_PLAYERS = 8;
   const MAX_ROUNDS = 30;
-  const DEFAULT_SECONDS_PER_LINE = 120;
+  const DEFAULT_SECONDS_PER_LINE = 60;
 
   const DIFFICULTY = {
     easy: {
       id: "easy",
       label: "ง่าย",
       digitCount: 4,
-      secondsPerLine: 120,
+      secondsPerLine: 60,
       columnFeedback: true,
       timeoutEnds: false,
       hint: "ง่าย · เลข 4 หลัก · สัญลักษณ์ตรงคอลัมน์ตัวเลข",
@@ -17,7 +17,7 @@
       id: "normal",
       label: "ปกติ",
       digitCount: 4,
-      secondsPerLine: 120,
+      secondsPerLine: 60,
       columnFeedback: false,
       timeoutEnds: false,
       hint: "ปกติ · เลข 4 หลัก · สัญลักษณ์รวมด้านขวา",
@@ -26,7 +26,7 @@
       id: "hard",
       label: "ยาก",
       digitCount: 5,
-      secondsPerLine: 120,
+      secondsPerLine: 60,
       columnFeedback: false,
       timeoutEnds: false,
       hint: "ยาก · เลข 5 หลัก",
@@ -149,7 +149,7 @@
     appVersion: document.getElementById("app-version"),
   };
 
-  const APP_VERSION = window.TUALEK_VERSION || "1.3.14";
+  const APP_VERSION = window.TUALEK_VERSION || "1.3.16";
   if (els.appVersion) els.appVersion.textContent = `V${APP_VERSION}`;
 
   const DIFFICULTY_TITLE = {
@@ -591,7 +591,7 @@
     }
     const cfg = difficultyConfig(setup.difficulty);
     els.timePreview.hidden = false;
-    const timeText = cfg.secondsPerLine === 120 ? "2 นาที" : `${cfg.secondsPerLine} วินาที`;
+    const timeText = cfg.secondsPerLine === 60 ? "1 นาที" : `${cfg.secondsPerLine} วินาที`;
     els.timePreview.textContent = `บังคับไม่เกินรอบละ ${timeText}ส่งคำตอบ`;
   }
 
@@ -2157,7 +2157,7 @@
     showScreen("login");
     const configured = window.TualekAuth.state.configured;
     els.loginStatus.textContent = configured
-      ? "ล็อกอินด้วย Google (Facebook ยังไม่พร้อมชั่วคราว)"
+      ? "ล็อกอินก่อนเข้าโหมดนี้"
       : "ยังตั้งค่า Firebase ไม่ครบ · ตั้งค่าบน Render ตาม README";
     els.loginActions.hidden = !configured;
     els.demoLogin.hidden = configured;
