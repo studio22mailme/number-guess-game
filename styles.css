@@ -746,17 +746,12 @@ html[data-age-theme="senior"] .dot-grid {
   border-bottom: 3px dashed rgba(43, 58, 92, 0.25);
 }
 
-.brand-kicker {
-  display: inline-block;
-  margin-bottom: 6px;
-  padding: 4px 12px;
-  border: 2px solid var(--line);
-  border-radius: 999px;
-  background: var(--sun);
-  font-family: "Mitr", "Prompt", sans-serif;
-  font-size: 0.85rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+.brand-logo {
+  display: block;
+  margin: 0 auto 8px;
+  width: min(200px, 52vw);
+  height: auto;
+  object-fit: contain;
 }
 
 .setup-head h1,

@@ -1,6 +1,6 @@
 {
   "name": "number-guess-game",
-  "version": "1.3.16",
+  "version": "1.3.17",
   "private": true,
   "description": "เกมท้ายตัวเลข — คนเดียว / ส่งเครื่อง / คนละเครื่อง",
   "main": "server.js",
