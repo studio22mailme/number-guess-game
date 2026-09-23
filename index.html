@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Mitr:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
+  <link rel="preload" as="image" href="logo.png" />
 </head>
 <body>
   <div class="sky" aria-hidden="true">
@@ -31,7 +32,7 @@
 
   <div id="age-gate" class="age-gate" hidden>
     <article class="age-gate-card" role="dialog" aria-modal="true" aria-labelledby="age-gate-title">
-      <img class="brand-logo" src="logo.png" alt="ท้ายตัวเลข" width="220" height="132" />
+      <img class="brand-logo" src="logo.png" alt="ท้ายตัวเลข" width="200" height="200" decoding="async" fetchpriority="high" />
       <h2 id="age-gate-title">ยินดีต้อนรับ</h2>
       <p class="age-gate-copy">กรอกอายุของคุณตอนนี้ ระบบจะจำปีเกิดไว้ในเครื่องนี้ แล้วปรับโทนสีตามอายุที่เพิ่มขึ้นในแต่ละปี</p>
       <form id="age-form" class="age-form">
@@ -48,7 +49,7 @@
     <section id="screen-login" class="screen" hidden>
       <article class="sheet sheet-setup login-sheet">
         <header class="setup-head">
-          <img class="brand-logo" src="logo.png" alt="ท้ายตัวเลข" width="220" height="132" />
+          <img class="brand-logo" src="logo.png" alt="ท้ายตัวเลข" width="200" height="200" decoding="async" fetchpriority="high" />
           <h1>เกมท้ายตัวเลข</h1>
           <p class="byline">พัฒนาโดย เฮียหนุ่มตองเอ็น</p>
           <p class="tagline">ฝึกสมองเล่นสนุกคนเดียวและแข่งกับเพื่อน</p>
@@ -84,7 +85,7 @@
     <section id="screen-setup" class="screen">
       <article class="sheet sheet-setup">
         <header class="setup-head">
-          <img class="brand-logo" src="logo.png" alt="ท้ายตัวเลข" width="220" height="132" />
+          <img class="brand-logo" src="logo.png" alt="ท้ายตัวเลข" width="200" height="200" decoding="async" fetchpriority="high" />
           <h1>เกมท้ายตัวเลข</h1>
           <p class="byline">พัฒนาโดย เฮียหนุ่มตองเอ็น</p>
           <p class="tagline" id="setup-tagline">ฝึกสมองเล่นสนุกคนเดียวและแข่งกับเพื่อน</p>
@@ -328,7 +329,7 @@
 
   <footer class="site-footer">
     <a id="privacy-link" class="site-privacy-link" href="/privacy.html">นโยบายความเป็นส่วนตัว</a>
-    <p id="app-version" class="app-version" aria-label="เวอร์ชันแอป">V1.3.18</p>
+    <p id="app-version" class="app-version" aria-label="เวอร์ชันแอป">V1.3.19</p>
   </footer>
   </div>
 
